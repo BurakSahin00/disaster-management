@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+.env
+.python-version
+
+# VS Code
+.vscode/
+
+# Logs and temp
+*.log
+*.tmp
+*.cache/
+
+# Data and patches (large files)
+dataset/
+patches/
+
+# OS files
+Thumbs.db
+Desktop.ini

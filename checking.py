@@ -1,5 +1,7 @@
 import re
 import rasterio
+from rasterio.enums import Resampling
+from rasterio.warp import reproject
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import numpy as np
@@ -132,6 +134,45 @@ def comparison(dataset_path1, dataset_path2):
     return overlap
 
 
+def align_to_reference(ref_path: Path, mov_path: Path, resampling: Resampling = Resampling.bilinear) -> np.ndarray:
+    """Reproject the moving image to exactly match the reference grid.
+
+    Returns a float32 array of shape (H,W,3) aligned to the reference using load_rgb's band selection.
+    """
+    with rasterio.open(ref_path) as ref:
+        ref_profile = ref.profile
+        ref_transform = ref.transform
+        ref_crs = ref.crs
+        H, W = ref.height, ref.width
+
+    # Load moving image RGB first (in its native grid)
+    rgb_mov = load_rgb(mov_path, bands=(5,3,2), gamma=1.0)
+    # Prepare output buffer aligned to reference
+    aligned = np.zeros((H, W, 3), dtype=np.float32)
+
+    with rasterio.open(mov_path) as mov:
+        for i, band_idx in enumerate((5, 3, 2) if mov.count >= 5 else (1, 2, 3)):
+            src_band = mov.read(band_idx).astype(np.float32)
+            dst_band = np.zeros((H, W), dtype=np.float32)
+            reproject(
+                source=src_band,
+                destination=dst_band,
+                src_transform=mov.transform,
+                src_crs=mov.crs,
+                dst_transform=ref_transform,
+                dst_crs=ref_crs,
+                resampling=resampling,
+                src_nodata=mov.nodata,
+                dst_nodata=0.0,
+            )
+            aligned[..., i] = dst_band
+
+    # Normalize with robust percentiles to reduce streaking
+    for i in range(3):
+        aligned[..., i] = _percentile_stretch(np.ma.masked_equal(aligned[..., i], 0.0))
+    return aligned
+
+
 def main():
     # Base directories relative to this file
     base_dir = Path(__file__).parent
@@ -192,7 +233,13 @@ def main():
 
     # Görselleştirme: son eşleşen çift için örnek
     pre = load_rgb(pre_path, bands=(5,3,2), gamma=1.15)
-    post = load_rgb(post_path, bands=(5,3,2), gamma=1.15)
+    # Align post to pre grid to avoid visual shifts
+    try:
+        post_aligned = align_to_reference(pre_path, post_path, resampling=Resampling.bilinear)
+        # Apply gamma after alignment
+        post = np.clip(post_aligned, 0.0, 1.0) ** (1.0/1.15)
+    except Exception:
+        post = load_rgb(post_path, bands=(5,3,2), gamma=1.15)
 
     plt.figure(figsize=(14, 6))
 

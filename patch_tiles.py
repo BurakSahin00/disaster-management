@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Optional, Tuple, List
 import numpy as np
 import rasterio
+from rasterio.enums import Resampling
+from rasterio.warp import reproject
 import matplotlib.image as mimage
 
 
@@ -13,8 +15,12 @@ def _percentile_stretch(arr: np.ndarray, p_low: float, p_high: float) -> np.ndar
         data = arr
     if data.size == 0:
         return np.zeros_like(arr, dtype=np.float32)
-    lo = np.percentile(data, p_low)
-    hi = np.percentile(data, p_high)
+    # Ignore zeros (common NoData) to avoid white streaks after resampling
+    data_nonzero = data[data != 0]
+    if data_nonzero.size == 0:
+        data_nonzero = data
+    lo = np.percentile(data_nonzero, p_low)
+    hi = np.percentile(data_nonzero, p_high)
     if hi <= lo:
         hi = lo + 1.0
     out = (arr.astype(np.float32) - lo) / (hi - lo)
@@ -35,6 +41,10 @@ def load_rgb(path: Path, bands: Optional[Tuple[int, int, int]], gamma: float,
         r = src.read(bands[0], masked=True)
         g = src.read(bands[1], masked=True)
         b = src.read(bands[2], masked=True)
+        # Treat explicit NoData and zeros as masked to reduce banding
+        r = np.ma.masked_equal(r, src.nodata if src.nodata is not None else 0)
+        g = np.ma.masked_equal(g, src.nodata if src.nodata is not None else 0)
+        b = np.ma.masked_equal(b, src.nodata if src.nodata is not None else 0)
         r_s = _percentile_stretch(r, p_low, p_high)
         g_s = _percentile_stretch(g, p_low, p_high)
         b_s = _percentile_stretch(b, p_low, p_high)
@@ -42,6 +52,37 @@ def load_rgb(path: Path, bands: Optional[Tuple[int, int, int]], gamma: float,
         if gamma != 1.0:
             rgb = np.clip(rgb, 0.0, 1.0) ** (1.0 / gamma)
         return rgb
+
+
+def align_to_reference_grid(ref_path: Path, mov_path: Path, bands: Optional[Tuple[int,int,int]],
+                            p_low: float, p_high: float, resampling: Resampling = Resampling.bilinear) -> np.ndarray:
+    """Reproject mov raster to the exact grid of ref raster and return normalized RGB."""
+    with rasterio.open(ref_path) as ref:
+        H, W = ref.height, ref.width
+        ref_transform = ref.transform
+        ref_crs = ref.crs
+
+    with rasterio.open(mov_path) as mov:
+        if bands is None:
+            bands = (5,3,2) if mov.count >= 5 else (1,2,3)
+        aligned = np.zeros((H, W, 3), dtype=np.float32)
+        for i, band_idx in enumerate(bands):
+            src_band = mov.read(band_idx)
+            dst_band = np.zeros((H, W), dtype=np.float32)
+            reproject(
+                source=src_band,
+                destination=dst_band,
+                src_transform=mov.transform,
+                src_crs=mov.crs,
+                dst_transform=ref_transform,
+                dst_crs=ref_crs,
+                resampling=resampling,
+                src_nodata=mov.nodata,
+                dst_nodata=0.0,
+            )
+            # Robust stretch per band, masking zeros
+            aligned[..., i] = _percentile_stretch(np.ma.masked_equal(dst_band, 0.0), p_low, p_high)
+        return aligned
 
 
 def extract_rgb_patches(tif_path: Path, out_root: Path, patch_size: int = 256, bands: Optional[Tuple[int, int, int]] = None,
@@ -132,6 +173,39 @@ def main():
         print(f"[PRE ] {tif.name} -> {count} patches")
         total_patches += count
     for tif in post_files:
+        # Align each post image to the corresponding pre image grid if a match exists by stem
+        # Fallback to native grid if no matching pre is found
+        match = next((p for p in pre_files if p.stem == tif.stem), None)
+        if match:
+            try:
+                aligned_rgb = align_to_reference_grid(match, tif, bands, args.p_low, args.p_high, resampling=Resampling.bilinear)
+                # Save aligned patches by writing a temporary mem array via npy route
+                # Create a temp npy file-like array pathless by iterating patches directly
+                h, w = aligned_rgb.shape[:2]
+                stem = tif.stem
+                out_dir = (out_post / stem)
+                out_dir.mkdir(parents=True, exist_ok=True)
+                count = 0
+                for y in range(0, h, args.patch_size):
+                    for x in range(0, w, args.patch_size):
+                        patch = aligned_rgb[y:y + args.patch_size, x:x + args.patch_size, :]
+                        if patch.shape[0] < args.patch_size or patch.shape[1] < args.patch_size:
+                            if args.no_pad:
+                                continue
+                            canvas = np.zeros((args.patch_size, args.patch_size, 3), dtype=patch.dtype)
+                            canvas[:patch.shape[0], :patch.shape[1], :] = patch
+                            patch = canvas
+                        out_path = out_dir / f"{stem}_y{y}_x{x}.{args.format}"
+                        if args.format == "png":
+                            mimage.imsave(out_path, patch, vmin=0.0, vmax=1.0)
+                        else:
+                            np.save(out_path, patch)
+                        count += 1
+                print(f"[POST-aligned] {tif.name} -> {count} patches")
+                total_patches += count
+                continue
+            except Exception:
+                pass
         count = extract_rgb_patches(tif, out_post, patch_size=args.patch_size, bands=bands, gamma=args.gamma,
                                     p_low=args.p_low, p_high=args.p_high, pad=not args.no_pad, format=args.format)
         print(f"[POST] {tif.name} -> {count} patches")

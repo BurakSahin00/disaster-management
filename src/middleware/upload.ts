@@ -1,15 +1,16 @@
 import multer from 'multer';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { config } from '../config';
 
 const storage = multer.diskStorage({
   destination: config.uploadDir,
-  filename: (_req, file, cb) => {
-    cb(null, `${Date.now()}_${file.originalname}`);
+  filename: (_req, _file, cb) => {
+    cb(null, `${Date.now()}_${crypto.randomBytes(8).toString('hex')}.tif`);
   },
 });
 
-const fileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
+export const tiffFileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
   if (ext === '.tif' || ext === '.tiff') {
     cb(null, true);
@@ -20,6 +21,6 @@ const fileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
 
 export const upload = multer({
   storage,
-  fileFilter,
+  fileFilter: tiffFileFilter,
   limits: { fileSize: 2 * 1024 * 1024 * 1024 }, // 2 GB
 });

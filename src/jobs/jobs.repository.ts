@@ -8,7 +8,7 @@ export interface Job {
   pre_path: string;
   post_path: string;
   output_dir: string;
-  result: object | null;
+  result: Record<string, unknown> | null;
   error: string | null;
   created_at: Date;
   completed_at: Date | null;
@@ -17,7 +17,7 @@ export interface Job {
 type CreateInput = Pick<Job, 'id' | 'pre_path' | 'post_path' | 'output_dir'>;
 
 interface UpdateExtra {
-  result?: object;
+  result?: Record<string, unknown>;
   error?: string;
   completed_at?: Date;
 }
@@ -31,6 +31,7 @@ export function createJobsRepository(db: Pool) {
          RETURNING *`,
         [input.id, input.pre_path, input.post_path, input.output_dir],
       );
+      if (!rows[0]) throw new Error(`INSERT did not return a row for job ${input.id}`);
       return rows[0];
     },
 

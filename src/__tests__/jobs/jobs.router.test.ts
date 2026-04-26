@@ -1,6 +1,8 @@
 // src/__tests__/jobs/jobs.router.test.ts
 import request from 'supertest';
 import express from 'express';
+import * as os from 'os';
+import * as fs from 'fs';
 
 jest.mock('../../jobs/jobs.service');
 jest.mock('../../middleware/upload', () => ({
@@ -68,5 +70,15 @@ describe('GET /jobs/:id/files/:file', () => {
     mockGetJob.mockResolvedValue(null);
     const res = await request(app).get('/jobs/missing/files/damage_overlay.png');
     expect(res.status).toBe(404);
+  });
+
+  it('calls sendFile for a valid file when job exists', async () => {
+    const tmpDir = os.tmpdir();
+    const tmpFile = 'damage_overlay.png';
+    fs.writeFileSync(`${tmpDir}/${tmpFile}`, 'fake image data');
+    mockGetJob.mockResolvedValue({ id: 'abc123', output_dir: tmpDir, status: 'completed' });
+    const res = await request(app).get('/jobs/abc123/files/damage_overlay.png');
+    expect(res.status).toBe(200);
+    fs.unlinkSync(`${tmpDir}/${tmpFile}`);
   });
 });

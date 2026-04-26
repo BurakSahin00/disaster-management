@@ -1,6 +1,5 @@
 // src/jobs/jobs.router.ts
 import { Router, Request, Response, NextFunction } from 'express';
-import * as path from 'path';
 import { upload } from '../middleware/upload';
 import { createJob, getJob } from './jobs.service';
 
@@ -62,7 +61,7 @@ jobsRouter.get(
         return;
       }
 
-      res.sendFile(path.join(job.output_dir, file));
+      res.sendFile(file, { root: job.output_dir });
     } catch (err) {
       next(err);
     }

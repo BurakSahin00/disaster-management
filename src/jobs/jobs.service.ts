@@ -1,7 +1,6 @@
 // src/jobs/jobs.service.ts
 import * as crypto from 'crypto';
 import * as path from 'path';
-import * as fs from 'fs';
 import { promises as fsPromises } from 'fs';
 import { config } from '../config';
 import { jobsRepository, Job } from './jobs.repository';

@@ -28,10 +28,13 @@ export async function runPipeline(
 
     const proc = spawn(config.pythonBin, args);
     let stderr = '';
+    let settled = false;
 
     proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+    proc.stdout.on('data', (chunk: Buffer) => { process.stdout.write(chunk); });
 
     const timer = setTimeout(() => {
+      settled = true;
       proc.kill();
       jobsRepository
         .updateStatus(jobId, 'failed', { error: 'Pipeline timed out after 30 minutes' })
@@ -40,11 +43,12 @@ export async function runPipeline(
 
     proc.on('close', async (code) => {
       clearTimeout(timer);
+      if (settled) { resolve(); return; }
 
       if (code === 0) {
         try {
           const reportPath = path.join(outputDir, 'report.json');
-          const result = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
+          const result = JSON.parse(await fs.promises.readFile(reportPath, 'utf-8'));
           await jobsRepository.updateStatus(jobId, 'completed', {
             result,
             completed_at: new Date(),

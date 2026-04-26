@@ -3,7 +3,10 @@ import { EventEmitter } from 'events';
 
 jest.mock('fs', () => ({
   ...jest.requireActual('fs'),
-  readFileSync: jest.fn().mockReturnValue('{"total_buildings": 3}'),
+  promises: {
+    ...jest.requireActual('fs').promises,
+    readFile: jest.fn().mockResolvedValue('{"total_buildings": 3}'),
+  },
 }));
 
 jest.mock('child_process');

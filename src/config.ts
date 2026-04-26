@@ -1,7 +1,8 @@
 // src/config.ts
 import * as dotenv from 'dotenv';
-dotenv.config();
 import * as path from 'path';
+
+dotenv.config();
 
 export const config = {
   port: Number(process.env.PORT ?? 3001),

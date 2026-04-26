@@ -2,6 +2,7 @@
 import * as crypto from 'crypto';
 import * as path from 'path';
 import * as fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import { config } from '../config';
 import { jobsRepository, Job } from './jobs.repository';
 import { runPipeline } from './pipeline.runner';
@@ -16,16 +17,24 @@ export async function createJob(
   const postDest = path.join(config.uploadDir, `${jobId}_post.tif`);
   const outputDir = path.join(config.outputDir, jobId);
 
-  fs.renameSync(preFile.path, preDest);
-  fs.renameSync(postFile.path, postDest);
-  fs.mkdirSync(outputDir, { recursive: true });
+  await fsPromises.rename(preFile.path, preDest);
+  await fsPromises.rename(postFile.path, postDest);
+  await fsPromises.mkdir(outputDir, { recursive: true });
 
-  const job = await jobsRepository.create({
-    id: jobId,
-    pre_path: preDest,
-    post_path: postDest,
-    output_dir: outputDir,
-  });
+  let job: Awaited<ReturnType<typeof jobsRepository.create>>;
+  try {
+    job = await jobsRepository.create({
+      id: jobId,
+      pre_path: preDest,
+      post_path: postDest,
+      output_dir: outputDir,
+    });
+  } catch (err) {
+    for (const p of [preDest, postDest]) {
+      try { await fsPromises.unlink(p); } catch { /* ignore */ }
+    }
+    throw err;
+  }
 
   // Fire-and-forget: caller gets job_id immediately
   runPipeline(jobId, preDest, postDest, outputDir).catch(console.error);

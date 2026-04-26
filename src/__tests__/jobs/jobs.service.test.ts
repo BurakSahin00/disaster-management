@@ -5,8 +5,11 @@ jest.mock('../../jobs/pipeline.runner', () => ({
   runPipeline: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('fs', () => ({
-  renameSync: jest.fn(),
-  mkdirSync: jest.fn(),
+  promises: {
+    rename: jest.fn().mockResolvedValue(undefined),
+    mkdir: jest.fn().mockResolvedValue(undefined),
+    unlink: jest.fn().mockResolvedValue(undefined),
+  },
 }));
 jest.mock('../../config', () => ({
   config: {

@@ -38,7 +38,11 @@ export async function runPipeline(
       proc.kill();
       jobsRepository
         .updateStatus(jobId, 'failed', { error: 'Pipeline timed out after 30 minutes' })
-        .then(resolve);
+        .then(resolve)
+        .catch((err) => {
+          console.error('Failed to mark job timed-out:', err);
+          resolve();
+        });
     }, TIMEOUT_MS);
 
     proc.on('close', async (code) => {

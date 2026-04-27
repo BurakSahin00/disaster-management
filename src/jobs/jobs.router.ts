@@ -61,7 +61,9 @@ jobsRouter.get(
         return;
       }
 
-      res.sendFile(file, { root: job.output_dir });
+      res.sendFile(file, { root: job.output_dir }, (err) => {
+        if (err) res.status(404).json({ error: 'Output file not found.' });
+      });
     } catch (err) {
       next(err);
     }

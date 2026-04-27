@@ -63,9 +63,13 @@ export async function runPipeline(
           });
         }
       } else {
-        await jobsRepository.updateStatus(jobId, 'failed', {
-          error: stderr || `Process exited with code ${code}`,
-        });
+        try {
+          await jobsRepository.updateStatus(jobId, 'failed', {
+            error: stderr || `Process exited with code ${code}`,
+          });
+        } catch (err) {
+          console.error('Failed to mark job failed:', err);
+        }
       }
 
       resolve();

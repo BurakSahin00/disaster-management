@@ -1,5 +1,6 @@
 // src/app.ts
 import express, { Request, Response, NextFunction } from 'express';
+import multer from 'multer';
 import { jobsRouter } from './jobs/jobs.router';
 
 export const app = express();
@@ -12,7 +13,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
     res.status(400).json({ error: err.message });
     return;
   }
-  if ((err as any).code === 'LIMIT_FILE_SIZE') {
+  if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
     res.status(413).json({ error: 'File too large. Maximum allowed size is 2 GB.' });
     return;
   }

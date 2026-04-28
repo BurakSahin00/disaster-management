@@ -9,6 +9,7 @@ import { runPipeline } from './pipeline.runner';
 export async function createJob(
   preFile: Express.Multer.File,
   postFile: Express.Multer.File,
+  analysisId?: string,
 ): Promise<Pick<Job, 'id' | 'status'>> {
   const jobId = crypto.randomUUID();
 
@@ -24,6 +25,7 @@ export async function createJob(
   try {
     job = await jobsRepository.create({
       id: jobId,
+      analysis_id: analysisId ?? null,
       pre_path: preDest,
       post_path: postDest,
       output_dir: outputDir,

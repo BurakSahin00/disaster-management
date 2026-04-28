@@ -12,6 +12,7 @@ const repo = createJobsRepository(pool as unknown as Pool);
 const baseJob: Job = {
   id: 'test-id',
   status: 'pending',
+  analysis_id: null,
   pre_path: '/uploads/test-id_pre.tif',
   post_path: '/uploads/test-id_post.tif',
   output_dir: '/outputs/test-id',

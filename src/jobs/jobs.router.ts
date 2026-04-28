@@ -21,7 +21,12 @@ jobsRouter.post(
         return;
       }
 
-      const job = await createJob(preFile, postFile);
+      const analysisIdRaw = (req.body?.analysisId ?? req.body?.analysis_id) as unknown;
+      const analysisId = typeof analysisIdRaw === 'string' && analysisIdRaw.length > 0
+        ? analysisIdRaw
+        : undefined;
+
+      const job = await createJob(preFile, postFile, analysisId);
       res.status(202).json(job);
     } catch (err) {
       next(err);

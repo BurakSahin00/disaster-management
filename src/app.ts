@@ -2,11 +2,17 @@
 import express, { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { jobsRouter } from './jobs/jobs.router';
+import { analysesRouter } from './analyses/analyses.router';
+import { imagesRouter } from './images/images.router';
+import { geodataRouter } from './geodata/geodata.router';
 
 export const app = express();
 
 app.use(express.json());
 app.use('/jobs', jobsRouter);
+app.use('/analyses', analysesRouter);
+app.use('/images', imagesRouter);
+app.use('/', geodataRouter);
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   if (err.message?.startsWith('Invalid file type')) {

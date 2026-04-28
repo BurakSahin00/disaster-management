@@ -4,6 +4,10 @@ import * as path from 'path';
 
 dotenv.config();
 
+// Varsayılan olarak projenin kökune gore app/main.py'yi isaret eder.
+// PYTHON_MAIN_PY ortam degiskeniyle override edilebilir.
+const projectRoot = path.resolve(__dirname, '..', '..', '..');
+
 export const config = {
   port: Number(process.env.PORT ?? 3001),
   databaseUrl: process.env.DATABASE_URL ?? '',
@@ -12,4 +16,6 @@ export const config = {
   segModelPath: process.env.SEG_MODEL_PATH ?? '',
   dmgModelPath: process.env.DMG_MODEL_PATH ?? '',
   pythonBin: process.env.PYTHON_BIN ?? 'python',
+  pythonMainPy: process.env.PYTHON_MAIN_PY
+    ?? path.join(projectRoot, 'app', 'main.py'),
 };

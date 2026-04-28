@@ -16,7 +16,7 @@ export async function runPipeline(
   await jobsRepository.updateStatus(jobId, 'running');
 
   return new Promise((resolve) => {
-    const mainPy = path.resolve(__dirname, '..', '..', '..', 'app', 'main.py');
+    const mainPy = config.pythonMainPy;
     const args = [
       mainPy,
       '--pre', prePath,

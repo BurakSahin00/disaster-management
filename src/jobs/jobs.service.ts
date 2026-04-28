@@ -32,11 +32,21 @@ export async function createJob(
     for (const p of [preDest, postDest]) {
       try { await fsPromises.unlink(p); } catch { /* ignore */ }
     }
+    try { await fsPromises.rm(outputDir, { recursive: true }); } catch { /* ignore */ }
     throw err;
   }
 
   // Fire-and-forget: caller gets job_id immediately
-  runPipeline(jobId, preDest, postDest, outputDir).catch(console.error);
+  runPipeline(jobId, preDest, postDest, outputDir).catch(async (err) => {
+    console.error('Unexpected pipeline error for job', jobId, err);
+    try {
+      await jobsRepository.updateStatus(jobId, 'failed', {
+        error: `Unexpected error: ${(err as Error).message ?? String(err)}`,
+      });
+    } catch (dbErr) {
+      console.error('Failed to mark job as failed after unexpected error:', dbErr);
+    }
+  });
 
   return { id: job.id, status: job.status };
 }

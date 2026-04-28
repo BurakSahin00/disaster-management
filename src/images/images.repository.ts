@@ -13,10 +13,11 @@ export interface SatelliteImage {
   created_at: Date;
 }
 
-type CreateInput = Pick<SatelliteImage, 'id' | 'uri'> & Partial<Pick<SatelliteImage, 'crs_wkt' | 'width_px' | 'height_px' | 'bands'>> & {
-  meta?: Record<string, unknown> | null;
-  bbox_4326_geojson?: Record<string, unknown> | null;
-};
+type CreateInput = Pick<SatelliteImage, 'id' | 'uri'> &
+  Partial<Pick<SatelliteImage, 'crs_wkt' | 'width_px' | 'height_px' | 'bands'>> & {
+    meta?: Record<string, unknown> | null;
+    bbox_4326_geojson?: Record<string, unknown> | null;
+  };
 
 export function createImagesRepository(db: Pool) {
   return {
@@ -44,11 +45,13 @@ export function createImagesRepository(db: Pool) {
     },
 
     async findById(id: string): Promise<SatelliteImage | null> {
-      const { rows } = await db.query<SatelliteImage>('SELECT * FROM satellite_images WHERE id = $1', [id]);
+      const { rows } = await db.query<SatelliteImage>(
+        'SELECT * FROM satellite_images WHERE id = $1',
+        [id],
+      );
       return rows[0] ?? null;
     },
   };
 }
 
 export const imagesRepository = createImagesRepository(defaultPool);
-

@@ -55,4 +55,3 @@ describe('GET /analyses/:id', () => {
     expect(res.body.status).toBe('running');
   });
 });
-

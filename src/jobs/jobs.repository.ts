@@ -39,39 +39,31 @@ export function createJobsRepository(db: Pool) {
     },
 
     async findById(id: string): Promise<Job | null> {
-      const { rows } = await db.query<Job>(
-        'SELECT * FROM jobs WHERE id = $1',
-        [id],
-      );
+      const { rows } = await db.query<Job>('SELECT * FROM jobs WHERE id = $1', [id]);
       return rows[0] ?? null;
     },
 
-    async updateStatus(
-      id: string,
-      status: Job['status'],
-      extra: UpdateExtra = {},
-    ): Promise<void> {
+    async updateStatus(id: string, status: Job['status'], extra: UpdateExtra = {}): Promise<void> {
       const sets: string[] = ['status = $2'];
       const values: unknown[] = [id, status];
-      let idx = 3;
 
       if (extra.result !== undefined) {
-        sets.push(`result = $${idx++}`);
+        const p = values.length + 1;
+        sets.push(`result = $${p}`);
         values.push(JSON.stringify(extra.result));
       }
       if (extra.error !== undefined) {
-        sets.push(`error = $${idx++}`);
+        const p = values.length + 1;
+        sets.push(`error = $${p}`);
         values.push(extra.error);
       }
       if (extra.completed_at !== undefined) {
-        sets.push(`completed_at = $${idx++}`);
+        const p = values.length + 1;
+        sets.push(`completed_at = $${p}`);
         values.push(extra.completed_at);
       }
 
-      await db.query(
-        `UPDATE jobs SET ${sets.join(', ')} WHERE id = $1`,
-        values,
-      );
+      await db.query(`UPDATE jobs SET ${sets.join(', ')} WHERE id = $1`, values);
     },
   };
 }

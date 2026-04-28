@@ -33,4 +33,3 @@ changeMapsRouter.post('/', async (req: Request, res: Response, next: NextFunctio
     next(err);
   }
 });
-

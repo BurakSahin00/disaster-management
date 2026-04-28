@@ -24,7 +24,13 @@ export function createAnalysesRepository(db: Pool) {
         `INSERT INTO analyses (id, user_id, pre_image_id, post_image_id, status)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING *`,
-        [input.id, input.user_id, input.pre_image_id, input.post_image_id, input.status ?? 'pending'],
+        [
+          input.id,
+          input.user_id,
+          input.pre_image_id,
+          input.post_image_id,
+          input.status ?? 'pending',
+        ],
       );
       if (!rows[0]) throw new Error(`INSERT did not return a row for analysis ${input.id}`);
       return rows[0];
@@ -48,4 +54,3 @@ export function createAnalysesRepository(db: Pool) {
 }
 
 export const analysesRepository = createAnalysesRepository(defaultPool);
-

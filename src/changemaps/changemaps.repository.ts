@@ -44,4 +44,3 @@ export function createChangeMapsRepository(db: Pool) {
 }
 
 export const changeMapsRepository = createChangeMapsRepository(defaultPool);
-

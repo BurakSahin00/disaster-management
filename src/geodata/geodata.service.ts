@@ -5,12 +5,10 @@ type Feature = { type: 'Feature'; geometry: object | null; properties?: Record<s
 type FeatureCollection = { type: 'FeatureCollection'; features: Feature[] };
 
 function isFeatureCollection(x: unknown): x is FeatureCollection {
-  return (
-    typeof x === 'object' &&
-    x !== null &&
-    (x as any).type === 'FeatureCollection' &&
-    Array.isArray((x as any).features)
-  );
+  if (typeof x !== 'object' || x === null) return false;
+  const obj = x as Record<string, unknown>;
+  if (obj['type'] !== 'FeatureCollection') return false;
+  return Array.isArray(obj['features']);
 }
 
 export async function persistBuildingsGeoJSONToPostGIS(input: {
@@ -28,9 +26,10 @@ export async function persistBuildingsGeoJSONToPostGIS(input: {
     if (!feature || feature.type !== 'Feature' || !feature.geometry) continue;
     const props = feature.properties ?? {};
 
-    const buildingId = typeof props.id === 'number' || typeof props.id === 'string'
-      ? String(props.id)
-      : crypto.randomUUID();
+    const buildingId =
+      typeof props.id === 'number' || typeof props.id === 'string'
+        ? String(props.id)
+        : crypto.randomUUID();
 
     await geodataRepository.insertBuilding({
       id: buildingId,
@@ -62,6 +61,13 @@ export async function getAnalysisBuildingsGeoJSON(analysisId: string): Promise<o
   return geodataRepository.getBuildingsGeoJSONByAnalysis(analysisId);
 }
 
+export async function getAnalysisBuildingsGeoJSONBbox(input: {
+  analysisId: string;
+  bbox4326?: [number, number, number, number];
+}): Promise<object> {
+  return geodataRepository.getBuildingsGeoJSONByAnalysis(input.analysisId, input.bbox4326);
+}
+
 export async function recomputeRegionsAndClusters(input: {
   analysisId: string;
   gridType?: 'square' | 'hex';
@@ -78,7 +84,20 @@ export async function getAnalysisRegionsGeoJSON(analysisId: string): Promise<obj
   return geodataRepository.getRegionsGeoJSONByAnalysis(analysisId);
 }
 
+export async function getAnalysisRegionsGeoJSONBbox(input: {
+  analysisId: string;
+  bbox4326?: [number, number, number, number];
+}): Promise<object> {
+  return geodataRepository.getRegionsGeoJSONByAnalysis(input.analysisId, input.bbox4326);
+}
+
 export async function getAnalysisClustersGeoJSON(analysisId: string): Promise<object> {
   return geodataRepository.getClustersGeoJSONByAnalysis(analysisId);
 }
 
+export async function getAnalysisClustersGeoJSONBbox(input: {
+  analysisId: string;
+  bbox4326?: [number, number, number, number];
+}): Promise<object> {
+  return geodataRepository.getClustersGeoJSONByAnalysis(input.analysisId, input.bbox4326);
+}

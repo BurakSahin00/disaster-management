@@ -20,4 +20,3 @@ export async function createAnalysis(input: {
 export async function getAnalysis(id: string): Promise<Analysis | null> {
   return analysesRepository.findById(id);
 }
-

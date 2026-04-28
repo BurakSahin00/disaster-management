@@ -19,14 +19,22 @@ export interface BuildingDamageRow {
 
 export function createGeodataRepository(db: Pool) {
   return {
-    async insertBuilding(input: { id: string; geomGeoJSON: object; props?: Record<string, unknown> | null }): Promise<void> {
+    async insertBuilding(input: {
+      id: string;
+      geomGeoJSON: object;
+      props?: Record<string, unknown> | null;
+    }): Promise<void> {
       await db.query(
         `INSERT INTO buildings (id, geom_4326, props)
-         VALUES ($1, ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON($2), 4326)), $3::jsonb)
+         VALUES ($1, ST_Multi(ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON($2), 4326))), $3::jsonb)
          ON CONFLICT (id) DO UPDATE SET
            geom_4326 = EXCLUDED.geom_4326,
            props = EXCLUDED.props`,
-        [input.id, JSON.stringify(input.geomGeoJSON), input.props ? JSON.stringify(input.props) : null],
+        [
+          input.id,
+          JSON.stringify(input.geomGeoJSON),
+          input.props ? JSON.stringify(input.props) : null,
+        ],
       );
     },
 
@@ -43,7 +51,7 @@ export function createGeodataRepository(db: Pool) {
         `INSERT INTO building_damages (id, analysis_id, building_id, damage_class, confidence, geom_4326, props)
          VALUES (
            $1, $2, $3, $4, $5,
-           CASE WHEN $6::text IS NULL THEN NULL ELSE ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON($6), 4326)) END,
+           CASE WHEN $6::text IS NULL THEN NULL ELSE ST_Multi(ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON($6), 4326))) END,
            $7::jsonb
          )
          ON CONFLICT (analysis_id, building_id) DO UPDATE SET
@@ -63,7 +71,10 @@ export function createGeodataRepository(db: Pool) {
       );
     },
 
-    async getBuildingsGeoJSONByAnalysis(analysisId: string): Promise<object> {
+    async getBuildingsGeoJSONByAnalysis(
+      analysisId: string,
+      bbox4326?: [number, number, number, number],
+    ): Promise<object> {
       const { rows } = await db.query<{ fc: object }>(
         `SELECT jsonb_build_object(
            'type','FeatureCollection',
@@ -81,8 +92,22 @@ export function createGeodataRepository(db: Pool) {
          ) AS fc
          FROM building_damages bd
          JOIN buildings b ON b.id = bd.building_id
-         WHERE bd.analysis_id = $1`,
-        [analysisId],
+         WHERE bd.analysis_id = $1
+           AND (
+             $2::bool IS FALSE OR
+             ST_Intersects(
+               COALESCE(bd.geom_4326, b.geom_4326),
+               ST_MakeEnvelope($3, $4, $5, $6, 4326)
+             )
+           )`,
+        [
+          analysisId,
+          bbox4326 ? true : false,
+          bbox4326?.[0] ?? null,
+          bbox4326?.[1] ?? null,
+          bbox4326?.[2] ?? null,
+          bbox4326?.[3] ?? null,
+        ],
       );
       return rows[0]?.fc ?? { type: 'FeatureCollection', features: [] };
     },
@@ -107,7 +132,10 @@ export function createGeodataRepository(db: Pool) {
       // - region_damages: one per DBSCAN cluster over building centroids (damage_class > 0)
       // - clusters: same geometry as region for now (can later merge regions)
       // - cluster_regions: link cluster → region
-      await db.query('DELETE FROM cluster_regions WHERE cluster_id IN (SELECT id FROM clusters WHERE analysis_id = $1)', [input.analysisId]);
+      await db.query(
+        'DELETE FROM cluster_regions WHERE cluster_id IN (SELECT id FROM clusters WHERE analysis_id = $1)',
+        [input.analysisId],
+      );
       await db.query('DELETE FROM clusters WHERE analysis_id = $1', [input.analysisId]);
       await db.query('DELETE FROM region_damages WHERE analysis_id = $1', [input.analysisId]);
 
@@ -127,8 +155,8 @@ export function createGeodataRepository(db: Pool) {
           SELECT
             analysis_id,
             damage_class,
-            (FLOOR(ST_X(pt_3857) / $4)::bigint * $4) AS gx,
-            (FLOOR(ST_Y(pt_3857) / $4)::bigint * $4) AS gy
+            (FLOOR(ST_X(pt_3857) / $3)::bigint * $3) AS gx,
+            (FLOOR(ST_Y(pt_3857) / $3)::bigint * $3) AS gy
           FROM pts
         ),
         grid_cells AS (
@@ -137,13 +165,13 @@ export function createGeodataRepository(db: Pool) {
             $1::text AS analysis_id,
             ST_Transform(
               ST_Multi(
-                ST_MakeEnvelope(gx, gy, gx + $4, gy + $4, 3857)
+                ST_MakeEnvelope(gx, gy, gx + $3, gy + $3, 3857)
               ),
               4326
             )::geometry(MultiPolygon, 4326) AS geom_4326,
             AVG(damage_class)::float AS severity,
             jsonb_build_object(
-              'cell_size_m', $4,
+              'cell_size_m', $3,
               'count', COUNT(*),
               'avg_damage_class', AVG(damage_class)::float,
               'damage_class_counts', jsonb_build_object(
@@ -173,14 +201,14 @@ export function createGeodataRepository(db: Pool) {
             severity,
             ST_Centroid(geom_4326) AS c
           FROM inserted_regions
-          WHERE severity >= $5
+          WHERE severity >= $4
         ),
         clustered_regions AS (
           SELECT
             region_id,
             geom_4326,
             severity,
-            ST_ClusterDBSCAN(c::geography, eps := $2, minpoints := $6) OVER () AS cid
+            ST_ClusterDBSCAN(ST_Transform(c, 3857), $2, $5) OVER () AS cid
           FROM cluster_input
         ),
         cluster_geoms AS (
@@ -192,12 +220,12 @@ export function createGeodataRepository(db: Pool) {
               'region_cells', COUNT(*),
               'avg_cell_severity', AVG(severity)::float,
               'eps_m', $2,
-              'minpoints', $6
+              'minpoints', $5
             ) AS stats
           FROM clustered_regions
           WHERE cid IS NOT NULL
           GROUP BY cid
-          HAVING COUNT(*) >= $7
+          HAVING COUNT(*) >= $6
         ),
         inserted_clusters AS (
           INSERT INTO clusters (id, analysis_id, geom_4326, severity, stats)
@@ -245,7 +273,7 @@ export function createGeodataRepository(db: Pool) {
             (h).i::int AS i,
             (h).j::int AS j
           FROM (
-            SELECT ST_HexagonGrid($4::float8, (SELECT b FROM bounds)) AS h
+            SELECT ST_HexagonGrid($3::float8, (SELECT b FROM bounds)) AS h
           ) s
         ),
         assigned AS (
@@ -265,7 +293,7 @@ export function createGeodataRepository(db: Pool) {
             AVG(damage_class)::float AS severity,
             jsonb_build_object(
               'grid', 'hex',
-              'hex_size_m', $4,
+              'hex_size_m', $3,
               'count', COUNT(*),
               'avg_damage_class', AVG(damage_class)::float,
               'damage_class_counts', jsonb_build_object(
@@ -295,14 +323,14 @@ export function createGeodataRepository(db: Pool) {
             severity,
             ST_Centroid(geom_4326) AS c
           FROM inserted_regions
-          WHERE severity >= $5
+          WHERE severity >= $4
         ),
         clustered_regions AS (
           SELECT
             region_id,
             geom_4326,
             severity,
-            ST_ClusterDBSCAN(c::geography, eps := $2, minpoints := $6) OVER () AS cid
+            ST_ClusterDBSCAN(ST_Transform(c, 3857), $2, $5) OVER () AS cid
           FROM cluster_input
         ),
         cluster_geoms AS (
@@ -314,13 +342,13 @@ export function createGeodataRepository(db: Pool) {
               'region_cells', COUNT(*),
               'avg_cell_severity', AVG(severity)::float,
               'eps_m', $2,
-              'minpoints', $6,
+              'minpoints', $5,
               'grid', 'hex'
             ) AS stats
           FROM clustered_regions
           WHERE cid IS NOT NULL
           GROUP BY cid
-          HAVING COUNT(*) >= $7
+          HAVING COUNT(*) >= $6
         )
         INSERT INTO clusters (id, analysis_id, geom_4326, severity, stats)
         SELECT
@@ -336,7 +364,7 @@ export function createGeodataRepository(db: Pool) {
           stats = EXCLUDED.stats;
       `;
 
-      const params: unknown[] = [input.analysisId, eps, minPts, grid, minAvg, minPts, minCells];
+      const params: unknown[] = [input.analysisId, eps, grid, minAvg, minPts, minCells];
 
       if (gridType === 'hex') {
         try {
@@ -356,15 +384,24 @@ export function createGeodataRepository(db: Pool) {
         await db.query(squareSql, params);
       }
 
-      const regionsCount = await db.query<{ n: string }>('SELECT COUNT(*)::text AS n FROM region_damages WHERE analysis_id = $1', [input.analysisId]);
-      const clustersCount = await db.query<{ n: string }>('SELECT COUNT(*)::text AS n FROM clusters WHERE analysis_id = $1', [input.analysisId]);
+      const regionsCount = await db.query<{ n: string }>(
+        'SELECT COUNT(*)::text AS n FROM region_damages WHERE analysis_id = $1',
+        [input.analysisId],
+      );
+      const clustersCount = await db.query<{ n: string }>(
+        'SELECT COUNT(*)::text AS n FROM clusters WHERE analysis_id = $1',
+        [input.analysisId],
+      );
       return {
         regions: Number(regionsCount.rows[0]?.n ?? '0'),
         clusters: Number(clustersCount.rows[0]?.n ?? '0'),
       };
     },
 
-    async getRegionsGeoJSONByAnalysis(analysisId: string): Promise<object> {
+    async getRegionsGeoJSONByAnalysis(
+      analysisId: string,
+      bbox4326?: [number, number, number, number],
+    ): Promise<object> {
       const { rows } = await db.query<{ fc: object }>(
         `SELECT jsonb_build_object(
            'type','FeatureCollection',
@@ -380,13 +417,27 @@ export function createGeodataRepository(db: Pool) {
            ), '[]'::jsonb)
          ) AS fc
          FROM region_damages rd
-         WHERE rd.analysis_id = $1`,
-        [analysisId],
+         WHERE rd.analysis_id = $1
+           AND (
+             $2::bool IS FALSE OR
+             ST_Intersects(rd.geom_4326, ST_MakeEnvelope($3, $4, $5, $6, 4326))
+           )`,
+        [
+          analysisId,
+          bbox4326 ? true : false,
+          bbox4326?.[0] ?? null,
+          bbox4326?.[1] ?? null,
+          bbox4326?.[2] ?? null,
+          bbox4326?.[3] ?? null,
+        ],
       );
       return rows[0]?.fc ?? { type: 'FeatureCollection', features: [] };
     },
 
-    async getClustersGeoJSONByAnalysis(analysisId: string): Promise<object> {
+    async getClustersGeoJSONByAnalysis(
+      analysisId: string,
+      bbox4326?: [number, number, number, number],
+    ): Promise<object> {
       const { rows } = await db.query<{ fc: object }>(
         `SELECT jsonb_build_object(
            'type','FeatureCollection',
@@ -402,8 +453,19 @@ export function createGeodataRepository(db: Pool) {
            ), '[]'::jsonb)
          ) AS fc
          FROM clusters c
-         WHERE c.analysis_id = $1`,
-        [analysisId],
+         WHERE c.analysis_id = $1
+           AND (
+             $2::bool IS FALSE OR
+             ST_Intersects(c.geom_4326, ST_MakeEnvelope($3, $4, $5, $6, 4326))
+           )`,
+        [
+          analysisId,
+          bbox4326 ? true : false,
+          bbox4326?.[0] ?? null,
+          bbox4326?.[1] ?? null,
+          bbox4326?.[2] ?? null,
+          bbox4326?.[3] ?? null,
+        ],
       );
       return rows[0]?.fc ?? { type: 'FeatureCollection', features: [] };
     },
@@ -411,4 +473,3 @@ export function createGeodataRepository(db: Pool) {
 }
 
 export const geodataRepository = createGeodataRepository(defaultPool);
-

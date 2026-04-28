@@ -5,6 +5,7 @@ import { jobsRouter } from './jobs/jobs.router';
 import { analysesRouter } from './analyses/analyses.router';
 import { imagesRouter } from './images/images.router';
 import { geodataRouter } from './geodata/geodata.router';
+import { ogcRouter } from './ogc/ogc.router';
 
 export const app = express();
 
@@ -13,6 +14,7 @@ app.use('/jobs', jobsRouter);
 app.use('/analyses', analysesRouter);
 app.use('/images', imagesRouter);
 app.use('/', geodataRouter);
+app.use('/ogc', ogcRouter);
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   if (err.message?.startsWith('Invalid file type')) {

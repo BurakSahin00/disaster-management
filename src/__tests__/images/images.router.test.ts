@@ -43,4 +43,3 @@ describe('GET /images/:id', () => {
     expect(res.body.id).toBe('img1');
   });
 });
-

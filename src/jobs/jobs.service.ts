@@ -32,7 +32,11 @@ export async function createJob(
     });
   } catch (err) {
     for (const p of [preDest, postDest]) {
-      try { await fsPromises.unlink(p); } catch { /* ignore */ }
+      try {
+        await fsPromises.unlink(p);
+      } catch {
+        /* ignore */
+      }
     }
     throw err;
   }

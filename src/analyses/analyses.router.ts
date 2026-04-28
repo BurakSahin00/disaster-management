@@ -1,6 +1,10 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { createAnalysis, getAnalysis } from './analyses.service';
 import { changeMapsRouter } from '../changemaps/changemaps.router';
+import {
+  persistBuildingsGeoJSONToPostGIS,
+  recomputeRegionsAndClusters,
+} from '../geodata/geodata.service';
 
 export const analysesRouter = Router();
 
@@ -8,6 +12,24 @@ export const analysesRouter = Router();
 // Auth/RBAC is intentionally not implemented yet (see progress report).
 
 analysesRouter.use('/:analysisId/change-maps', changeMapsRouter);
+
+// Webhook-like ingest endpoint: ML engine can POST GeoJSON results.
+analysesRouter.post(
+  '/:analysisId/ingest/buildings',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const analysisId = req.params['analysisId'] as string;
+      const result = await persistBuildingsGeoJSONToPostGIS({
+        analysisId,
+        featureCollection: req.body,
+      });
+      await recomputeRegionsAndClusters({ analysisId });
+      res.status(202).json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 analysesRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -39,4 +61,3 @@ analysesRouter.get('/:id', async (req: Request, res: Response, next: NextFunctio
     next(err);
   }
 });
-

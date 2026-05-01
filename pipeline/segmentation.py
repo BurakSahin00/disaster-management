@@ -16,15 +16,43 @@ class SegmentationModel:
         self.model = self._load(model_path)
 
     def _load(self, path: str) -> nn.Module:
-        checkpoint = torch.load(path, map_location=self.device)
-        # .pth dosyası direkt model ise
+        # PyTorch 2.6+ defaults to weights_only=True which cannot load full nn.Module checkpoints.
+        # This pipeline expects full models saved with torch.save(model, path).
+        checkpoint = torch.load(path, map_location=self.device, weights_only=False)
+        # Case 1: .pth is a full nn.Module
         if isinstance(checkpoint, nn.Module):
             model = checkpoint
-        # state_dict ise — model mimarisini dışarıdan alacak şekilde genişletilebilir
+        # Case 2: training checkpoint dict (common)
+        elif isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+            arch = checkpoint.get("arch")
+            encoder_name = checkpoint.get("encoder_name")
+            if arch != "Unet" or not isinstance(encoder_name, str):
+                raise ValueError(
+                    "Unsupported segmentation checkpoint format. "
+                    "Expected {arch: 'Unet', encoder_name: str, model_state_dict: ...}."
+                )
+            try:
+                import segmentation_models_pytorch as smp  # type: ignore
+            except ModuleNotFoundError as e:
+                raise ModuleNotFoundError(
+                    "segmentation_models_pytorch is required to load this checkpoint. "
+                    "Install it with: pip install segmentation-models-pytorch timm"
+                ) from e
+
+            # Checkpoint was trained as binary segmentation: 1 output channel.
+            model = smp.Unet(
+                encoder_name=encoder_name,
+                encoder_weights=None,
+                in_channels=3,
+                classes=1,
+                activation=None,
+            )
+            model.load_state_dict(checkpoint["model_state_dict"], strict=True)
         else:
             raise ValueError(
-                "Model direkt nn.Module olarak kaydedilmemiş. "
-                "SegmentationModel.__init__ içine 'architecture' parametresi ekleyin."
+                "Unsupported segmentation checkpoint. "
+                "Save a full nn.Module via torch.save(model, path), "
+                "or provide a dict with 'model_state_dict'."
             )
         model.eval()
         model.to(self.device)

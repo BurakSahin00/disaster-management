@@ -1,6 +1,9 @@
 jest.mock('../../jobs/jobs.repository', () => ({
   jobsRepository: { create: jest.fn(), findById: jest.fn() },
 }));
+jest.mock('../../jobs/geotiff.validator', () => ({
+  validateGeoTiffs: jest.fn().mockResolvedValue(undefined),
+}));
 jest.mock('../../jobs/pipeline.runner', () => ({
   runPipeline: jest.fn().mockResolvedValue(undefined),
 }));

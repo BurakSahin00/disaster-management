@@ -1,25 +1,16 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import * as crypto from 'crypto';
 import { imagesRepository } from './images.repository';
+import { requireApiKey } from '../middleware/apiKey';
+import { parseBody } from '../validation/zod';
+import { zRegisterImage } from '../validation/schemas';
 
 export const imagesRouter = Router();
 
 // Minimal metadata registration. Upload-to-storage can be added later.
-imagesRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
+imagesRouter.post('/', requireApiKey, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const body = req.body as {
-      uri?: string;
-      crsWkt?: string;
-      widthPx?: number;
-      heightPx?: number;
-      bands?: number;
-      bbox4326GeoJSON?: Record<string, unknown>;
-      meta?: Record<string, unknown>;
-    };
-    if (!body.uri) {
-      res.status(400).json({ error: 'uri is required.' });
-      return;
-    }
+    const body = parseBody(zRegisterImage, req.body);
 
     const id = crypto.randomUUID();
     const row = await imagesRepository.create({

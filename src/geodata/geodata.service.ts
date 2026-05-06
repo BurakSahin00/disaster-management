@@ -14,6 +14,7 @@ function isFeatureCollection(x: unknown): x is FeatureCollection {
 export async function persistBuildingsGeoJSONToPostGIS(input: {
   analysisId: string;
   featureCollection: unknown;
+  changeMapId?: string | null;
 }): Promise<{ buildingsInserted: number; damagesInserted: number }> {
   if (!isFeatureCollection(input.featureCollection)) {
     throw new Error('Invalid buildings.geojson (expected FeatureCollection).');
@@ -26,15 +27,23 @@ export async function persistBuildingsGeoJSONToPostGIS(input: {
     if (!feature || feature.type !== 'Feature' || !feature.geometry) continue;
     const props = feature.properties ?? {};
 
+    const localId = props['id'];
     const buildingId =
-      typeof props.id === 'number' || typeof props.id === 'string'
-        ? String(props.id)
+      typeof localId === 'number' || typeof localId === 'string'
+        ? `${input.analysisId}:b:${String(localId)}`
         : crypto.randomUUID();
+
+    const extraProps: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(props)) {
+      if (k === 'id' || k === 'damage_class' || k === 'confidence') continue;
+      extraProps[k] = v;
+    }
+    const propsPayload = Object.keys(extraProps).length > 0 ? extraProps : null;
 
     await geodataRepository.insertBuilding({
       id: buildingId,
       geomGeoJSON: feature.geometry,
-      props: null,
+      props: propsPayload,
     });
     buildingsInserted += 1;
 
@@ -46,10 +55,11 @@ export async function persistBuildingsGeoJSONToPostGIS(input: {
       id: crypto.randomUUID(),
       analysisId: input.analysisId,
       buildingId,
+      changeMapId: input.changeMapId ?? null,
       damageClass,
       confidence: typeof props.confidence === 'number' ? props.confidence : null,
       geomGeoJSON: feature.geometry,
-      props: null,
+      props: propsPayload,
     });
     damagesInserted += 1;
   }

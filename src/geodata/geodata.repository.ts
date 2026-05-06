@@ -42,19 +42,21 @@ export function createGeodataRepository(db: Pool) {
       id: string;
       analysisId: string;
       buildingId: string;
+      changeMapId?: string | null;
       damageClass: number;
       confidence?: number | null;
       geomGeoJSON?: object | null;
       props?: Record<string, unknown> | null;
     }): Promise<void> {
       await db.query(
-        `INSERT INTO building_damages (id, analysis_id, building_id, damage_class, confidence, geom_4326, props)
+        `INSERT INTO building_damages (id, analysis_id, building_id, change_map_id, damage_class, confidence, geom_4326, props)
          VALUES (
-           $1, $2, $3, $4, $5,
-           CASE WHEN $6::text IS NULL THEN NULL ELSE ST_Multi(ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON($6), 4326))) END,
-           $7::jsonb
+           $1, $2, $3, $4, $5, $6,
+           CASE WHEN $7::text IS NULL THEN NULL ELSE ST_Multi(ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON($7::text), 4326))) END,
+           $8::jsonb
          )
          ON CONFLICT (analysis_id, building_id) DO UPDATE SET
+           change_map_id = COALESCE(EXCLUDED.change_map_id, building_damages.change_map_id),
            damage_class = EXCLUDED.damage_class,
            confidence = EXCLUDED.confidence,
            geom_4326 = COALESCE(EXCLUDED.geom_4326, building_damages.geom_4326),
@@ -63,6 +65,7 @@ export function createGeodataRepository(db: Pool) {
           input.id,
           input.analysisId,
           input.buildingId,
+          input.changeMapId ?? null,
           input.damageClass,
           input.confidence ?? null,
           input.geomGeoJSON ? JSON.stringify(input.geomGeoJSON) : null,
@@ -122,16 +125,17 @@ export function createGeodataRepository(db: Pool) {
       clusterMinCellCount?: number;
     }): Promise<{ regions: number; clusters: number }> {
       const eps = input.epsMeters ?? 150;
-      const minPts = input.minPoints ?? 5;
+      const minPts = input.minPoints ?? 1;
       const grid = input.gridSizeMeters ?? 250;
-      const minAvg = input.clusterMinAvgDamageClass ?? 1.5;
-      const minCells = input.clusterMinCellCount ?? 3;
+      // Cells with any damaged building (1–3) enter clustering; singleton-friendly defaults.
+      const minAvg = input.clusterMinAvgDamageClass ?? 0.01;
+      const minCells = input.clusterMinCellCount ?? 1;
       const gridType = input.gridType ?? 'square';
 
       // Wipes derived tables for the analysis, then regenerates:
-      // - region_damages: one per DBSCAN cluster over building centroids (damage_class > 0)
-      // - clusters: same geometry as region for now (can later merge regions)
-      // - cluster_regions: link cluster → region
+      // - region_damages: grid cells over ALL building centroids (incl. class 0)
+      // - clusters: DBSCAN over cells that contain at least one damaged building (class 1–3)
+      // - cluster_regions: link cluster → region (square path; hex mirrors this)
       await db.query(
         'DELETE FROM cluster_regions WHERE cluster_id IN (SELECT id FROM clusters WHERE analysis_id = $1)',
         [input.analysisId],
@@ -149,7 +153,6 @@ export function createGeodataRepository(db: Pool) {
           FROM building_damages bd
           JOIN buildings b ON b.id = bd.building_id
           WHERE bd.analysis_id = $1
-            AND bd.damage_class > 0
         ),
         binned AS (
           SELECT
@@ -175,6 +178,7 @@ export function createGeodataRepository(db: Pool) {
               'count', COUNT(*),
               'avg_damage_class', AVG(damage_class)::float,
               'damage_class_counts', jsonb_build_object(
+                '0', SUM(CASE WHEN damage_class = 0 THEN 1 ELSE 0 END),
                 '1', SUM(CASE WHEN damage_class = 1 THEN 1 ELSE 0 END),
                 '2', SUM(CASE WHEN damage_class = 2 THEN 1 ELSE 0 END),
                 '3', SUM(CASE WHEN damage_class = 3 THEN 1 ELSE 0 END)
@@ -201,7 +205,12 @@ export function createGeodataRepository(db: Pool) {
             severity,
             ST_Centroid(geom_4326) AS c
           FROM inserted_regions
-          WHERE severity >= $4
+          WHERE (
+            COALESCE((stats->'damage_class_counts'->>'1')::int, 0)
+            + COALESCE((stats->'damage_class_counts'->>'2')::int, 0)
+            + COALESCE((stats->'damage_class_counts'->>'3')::int, 0)
+          ) > 0
+            AND severity >= $4
         ),
         clustered_regions AS (
           SELECT
@@ -261,7 +270,6 @@ export function createGeodataRepository(db: Pool) {
           FROM building_damages bd
           JOIN buildings b ON b.id = bd.building_id
           WHERE bd.analysis_id = $1
-            AND bd.damage_class > 0
         ),
         bounds AS (
           SELECT ST_Envelope(ST_Extent(pt_3857))::geometry(Polygon, 3857) AS b
@@ -297,6 +305,7 @@ export function createGeodataRepository(db: Pool) {
               'count', COUNT(*),
               'avg_damage_class', AVG(damage_class)::float,
               'damage_class_counts', jsonb_build_object(
+                '0', SUM(CASE WHEN damage_class = 0 THEN 1 ELSE 0 END),
                 '1', SUM(CASE WHEN damage_class = 1 THEN 1 ELSE 0 END),
                 '2', SUM(CASE WHEN damage_class = 2 THEN 1 ELSE 0 END),
                 '3', SUM(CASE WHEN damage_class = 3 THEN 1 ELSE 0 END)
@@ -323,7 +332,12 @@ export function createGeodataRepository(db: Pool) {
             severity,
             ST_Centroid(geom_4326) AS c
           FROM inserted_regions
-          WHERE severity >= $4
+          WHERE (
+            COALESCE((stats->'damage_class_counts'->>'1')::int, 0)
+            + COALESCE((stats->'damage_class_counts'->>'2')::int, 0)
+            + COALESCE((stats->'damage_class_counts'->>'3')::int, 0)
+          ) > 0
+            AND severity >= $4
         ),
         clustered_regions AS (
           SELECT
@@ -349,19 +363,29 @@ export function createGeodataRepository(db: Pool) {
           WHERE cid IS NOT NULL
           GROUP BY cid
           HAVING COUNT(*) >= $6
+        ),
+        inserted_clusters AS (
+          INSERT INTO clusters (id, analysis_id, geom_4326, severity, stats)
+          SELECT
+            CONCAT($1, ':cluster:', cid)::text,
+            $1,
+            geom_4326,
+            severity,
+            stats
+          FROM cluster_geoms
+          ON CONFLICT (id) DO UPDATE SET
+            geom_4326 = EXCLUDED.geom_4326,
+            severity = EXCLUDED.severity,
+            stats = EXCLUDED.stats
+          RETURNING id
         )
-        INSERT INTO clusters (id, analysis_id, geom_4326, severity, stats)
+        INSERT INTO cluster_regions (cluster_id, region_damage_id)
         SELECT
-          CONCAT($1, ':cluster:', cid)::text,
-          $1,
-          geom_4326,
-          severity,
-          stats
-        FROM cluster_geoms
-        ON CONFLICT (id) DO UPDATE SET
-          geom_4326 = EXCLUDED.geom_4326,
-          severity = EXCLUDED.severity,
-          stats = EXCLUDED.stats;
+          CONCAT($1, ':cluster:', cr.cid)::text,
+          cr.region_id
+        FROM clustered_regions cr
+        WHERE cr.cid IS NOT NULL
+        ON CONFLICT DO NOTHING;
       `;
 
       const params: unknown[] = [input.analysisId, eps, grid, minAvg, minPts, minCells];

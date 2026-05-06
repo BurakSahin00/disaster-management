@@ -5,6 +5,9 @@ import {
   persistBuildingsGeoJSONToPostGIS,
   recomputeRegionsAndClusters,
 } from '../geodata/geodata.service';
+import { requireApiKey } from '../middleware/apiKey';
+import { parseBody } from '../validation/zod';
+import { zCreateAnalysis, zFeatureCollection } from '../validation/schemas';
 
 export const analysesRouter = Router();
 
@@ -16,12 +19,14 @@ analysesRouter.use('/:analysisId/change-maps', changeMapsRouter);
 // Webhook-like ingest endpoint: ML engine can POST GeoJSON results.
 analysesRouter.post(
   '/:analysisId/ingest/buildings',
+  requireApiKey,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const analysisId = req.params['analysisId'] as string;
+      const fc = parseBody(zFeatureCollection, req.body);
       const result = await persistBuildingsGeoJSONToPostGIS({
         analysisId,
-        featureCollection: req.body,
+        featureCollection: fc,
       });
       await recomputeRegionsAndClusters({ analysisId });
       res.status(202).json(result);
@@ -31,13 +36,9 @@ analysesRouter.post(
   },
 );
 
-analysesRouter.post('/', async (req: Request, res: Response, next: NextFunction) => {
+analysesRouter.post('/', requireApiKey, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const body = req.body as { userId?: string; preImageId?: string; postImageId?: string };
-    if (!body.userId || !body.preImageId || !body.postImageId) {
-      res.status(400).json({ error: 'userId, preImageId, postImageId are required.' });
-      return;
-    }
+    const body = parseBody(zCreateAnalysis, req.body);
     const analysis = await createAnalysis({
       userId: body.userId,
       preImageId: body.preImageId,

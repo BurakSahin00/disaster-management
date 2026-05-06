@@ -5,6 +5,9 @@ import {
   getAnalysisRegionsGeoJSONBbox,
   recomputeRegionsAndClusters,
 } from './geodata.service';
+import { requireApiKey } from '../middleware/apiKey';
+import { parseBody } from '../validation/zod';
+import { zRecompute } from '../validation/schemas';
 
 export const geodataRouter = Router();
 
@@ -74,19 +77,11 @@ geodataRouter.get(
 // Manual trigger for derived layers (useful for debugging/tuning eps/minPoints).
 geodataRouter.post(
   '/analyses/:analysisId/recompute',
+  requireApiKey,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const analysisId = req.params['analysisId'] as string;
-      const body = req.body as
-        | {
-            gridType?: 'square' | 'hex';
-            epsMeters?: number;
-            minPoints?: number;
-            gridSizeMeters?: number;
-            clusterMinAvgDamageClass?: number;
-            clusterMinCellCount?: number;
-          }
-        | undefined;
+      const body = parseBody(zRecompute, req.body);
       const result = await recomputeRegionsAndClusters({
         analysisId,
         gridType: body?.gridType,

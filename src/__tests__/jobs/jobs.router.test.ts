@@ -62,7 +62,7 @@ describe('GET /jobs/:id', () => {
 describe('GET /jobs/:id/files/:file', () => {
   it('returns 400 for disallowed file names', async () => {
     mockGetJob.mockResolvedValue({ id: 'abc123', output_dir: '/outputs/abc123' });
-    const res = await request(app).get('/jobs/abc123/files/report.json');
+    const res = await request(app).get('/jobs/abc123/files/not-allowed.bin');
     expect(res.status).toBe(400);
   });
 

@@ -3,7 +3,7 @@
 ML-supported post-earthquake building damage assessment system backend.
 
 - Accepts **pre/post GeoTIFF** uploads
-- Runs the **Python ML pipeline** (`../app/main.py`) asynchronously
+- Runs the **Python ML pipeline** (`../pipeline/main.py`) asynchronously
 - Persists analysis outputs in **PostgreSQL/PostGIS**
 - Serves map-ready layers as **GeoJSON** (buildings/regions/clusters)
 - Provides an **OGC API Features–like** read interface under `/ogc`
@@ -35,6 +35,7 @@ Fill in at least:
 - `SEG_MODEL_PATH`
 - `DMG_MODEL_PATH`
 - `PYTHON_BIN` (usually `python`)
+- `PIPELINE_ENTRYPOINT` (defaults to `../pipeline/main.py`)
 
 ## Database (PostGIS)
 
@@ -51,6 +52,11 @@ Dev server:
 ```powershell
 npm run dev
 ```
+
+API docs (Swagger UI):
+
+- `GET /docs`
+- OpenAPI JSON: `GET /openapi.json`
 
 Build:
 

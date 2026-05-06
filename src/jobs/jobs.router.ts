@@ -2,13 +2,31 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { upload } from '../middleware/upload';
 import { createJob, getJob } from './jobs.service';
+import { requireApiKey } from '../middleware/apiKey';
 
 export const jobsRouter = Router();
 
-const ALLOWED_FILES = new Set(['damage_overlay.png', 'building_mask.png']);
+const ALLOWED_FILES = new Set([
+  'damage_overlay.png',
+  'building_mask.png',
+  'damage_map.tif',
+  'report.json',
+  'buildings.geojson',
+  'change_map_meta.json',
+]);
+
+const OUTPUT_CONTENT_TYPE: Record<string, string> = {
+  'damage_overlay.png': 'image/png',
+  'building_mask.png': 'image/png',
+  'damage_map.tif': 'image/tiff',
+  'report.json': 'application/json',
+  'buildings.geojson': 'application/geo+json',
+  'change_map_meta.json': 'application/json',
+};
 
 jobsRouter.post(
   '/',
+  requireApiKey,
   upload.fields([
     { name: 'pre', maxCount: 1 },
     { name: 'post', maxCount: 1 },
@@ -65,6 +83,9 @@ jobsRouter.get('/:id/files/:file', async (req: Request, res: Response, next: Nex
       res.status(404).json({ error: 'Job not found.' });
       return;
     }
+
+    const ct = OUTPUT_CONTENT_TYPE[file];
+    if (ct) res.type(ct);
 
     res.sendFile(file, { root: job.output_dir }, (err) => {
       if (err) res.status(404).json({ error: 'Output file not found.' });

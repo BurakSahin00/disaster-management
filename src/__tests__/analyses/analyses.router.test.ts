@@ -1,5 +1,6 @@
 import request from 'supertest';
 import express from 'express';
+import { ZodError } from 'zod';
 
 jest.mock('../../../src/analyses/analyses.service', () => ({
   createAnalysis: jest.fn(),
@@ -15,6 +16,17 @@ const mockGet = getAnalysis as jest.Mock;
 const app = express();
 app.use(express.json());
 app.use('/analyses', analysesRouter);
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  if (err instanceof ZodError) {
+    res.status(400).json({ error: 'Validation error' });
+    return;
+  }
+  if (err.message?.startsWith('Validation error:')) {
+    res.status(400).json({ error: err.message });
+    return;
+  }
+  res.status(500).json({ error: 'Internal server error.' });
+});
 
 describe('POST /analyses', () => {
   it('returns 400 when required fields missing', async () => {

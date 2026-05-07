@@ -16,6 +16,7 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
+        if (!credentials.email.trim() || !credentials.password.trim()) return null
         const user = USERS.find(
           (u) => u.email === credentials.email && u.password === credentials.password
         )
@@ -25,11 +26,11 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) token.role = (user as { role: string }).role
+      if (user) token.role = user.role
       return token
     },
     async session({ session, token }) {
-      if (session.user) (session.user as { role?: string }).role = token.role as string
+      if (session.user) session.user.role = token.role ?? 'user'
       return session
     },
   },

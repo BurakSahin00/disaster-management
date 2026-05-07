@@ -1,36 +1,126 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Afet Hasar Analizi — Frontend
 
-## Getting Started
+Next.js 14 tabanlı afet sonrası bina hasar analizi görselleştirme arayüzü. Makine öğrenmesi pipeline'ından gelen GeoJSON verilerini interaktif harita üzerinde sunar.
 
-First, run the development server:
+---
+
+## Özellikler
+
+- **2 rol kimlik doğrulama** — Admin ve kullanıcı, NextAuth.js credentials provider
+- **TIFF yükleme akışı** — Ön ve son görüntüyü sürükle-bırak ile yükle, WebSocket üzerinden anlık ilerleme takibi
+- **İnteraktif harita** — React-Leaflet, viewport bbox filtreli GeoJSON katmanları (binalar, bölgeler, kümeler)
+- **4 hasar sınıfı** renk kodlaması ile görselleştirme
+- **Admin paneli** — Tüm analizleri listele (admin rolüne özel)
+
+## Hasar Sınıfları
+
+| Sınıf | Etiket | Renk |
+|-------|--------|------|
+| 0 | Hasarsız | `#22c55e` |
+| 1 | Az Hasarlı | `#eab308` |
+| 2 | Ağır Hasarlı | `#f97316` |
+| 3 | Yıkık | `#ef4444` |
+
+---
+
+## Kurulum
+
+### Gereksinimler
+
+- Node.js 18+
+- Backend API çalışır durumda (varsayılan: `http://localhost:3001`)
+
+### Adımlar
+
+```bash
+cd frontend
+npm install
+```
+
+`.env.local` dosyası oluştur:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=<openssl rand -base64 32 ile üret>
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASS=guclu-sifre
+USER_EMAIL=user@example.com
+USER_PASS=guclu-sifre
+```
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Uygulama `http://localhost:3000` adresinde açılır.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Proje Yapısı
 
-## Learn More
+```
+frontend/
+  src/
+    app/
+      (auth)/login/          ← Giriş sayfası
+      (protected)/
+        layout.tsx           ← Oturum koruması + Navbar
+        upload/              ← TIFF yükleme + WebSocket ilerleme
+        analyses/[id]/       ← Harita + istatistik paneli
+        admin/               ← Admin analiz listesi
+      api/auth/[...nextauth] ← NextAuth handler
+    components/
+      upload/   UploadZone, ProgressScreen
+      map/      LeafletMap, LeafletMapInner, StatsPanel
+      ui/       StatCard, Navbar, Logo, Tag, TweaksPanel
+    lib/
+      api.ts    → Backend REST çağrıları
+      ws.ts     → useJobSocket hook (WebSocket)
+      auth.ts   → NextAuth yapılandırması
+      damage.ts → Hasar sınıfı eşlemeleri
+    types/      → TypeScript tip tanımları
+  __mocks__/    → Jest için Leaflet mock'ları
+```
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## API Entegrasyonu
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Backend base URL: `NEXT_PUBLIC_API_URL` env değişkeni
 
-## Deploy on Vercel
+| Endpoint | Kullanım |
+|----------|----------|
+| `POST /jobs` | TIFF yükleme ve iş başlatma |
+| `GET /jobs/:id` | İş durumu sorgulama |
+| `GET /analyses/:id/buildings.geojson?bbox=...` | Bina katmanı |
+| `GET /analyses/:id/regions.geojson?bbox=...` | Bölge katmanı |
+| `GET /analyses/:id/clusters.geojson?bbox=...` | Küme katmanı |
+| `WS /ws?jobId=<id>` | Gerçek zamanlı iş durumu |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Komutlar
+
+```bash
+npm run dev        # Geliştirme sunucusu
+npm run build      # Prodüksiyon build
+npm run start      # Prodüksiyon sunucusu
+npm test           # Jest test suite (27 test)
+npm run lint       # ESLint
+```
+
+---
+
+## Teknoloji Yığını
+
+| Katman | Teknoloji |
+|--------|-----------|
+| Framework | Next.js 14 (App Router) |
+| Auth | NextAuth.js v4 (credentials) |
+| Stil | Tailwind CSS |
+| Harita | React-Leaflet + Leaflet |
+| Dosya Yükleme | react-dropzone |
+| Gerçek Zamanlı | Browser WebSocket API |
+| Test | Jest + React Testing Library |
+| Dil | TypeScript |

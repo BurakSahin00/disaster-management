@@ -11,9 +11,10 @@ export function StatCard({ label, value, percentage, color }: StatCardProps) {
       <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} aria-hidden="true" />
       <div className="flex-1 min-w-0">
         <div className="text-xs text-slate-400 truncate">{label}</div>
-        <div className="text-sm font-semibold text-slate-100">{value}</div>
+        <div className="text-sm font-semibold text-slate-100 tabular-nums">
+          {`${value} (${percentage.toFixed(1)}%)`}
+        </div>
       </div>
-      <div className="text-xs text-slate-400 tabular-nums">{percentage.toFixed(1)}%</div>
     </div>
   )
 }

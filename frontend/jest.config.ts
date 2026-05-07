@@ -4,8 +4,7 @@ import nextJest from 'next/jest'
 const createJestConfig = nextJest({ dir: './' })
 
 const config: Config = {
-  // @ts-ignore - setupFilesAfterFramework is the correct Jest API
-  setupFilesAfterFramework: ['<rootDir>/jest.setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',

@@ -51,7 +51,7 @@ export function LeafletMapInner({
     return { color: dmg.color, fillColor: dmg.color, fillOpacity: 0.6, weight: 1 }
   }
 
-  const buildingPopup = (feature: GeoJSONFeature, layer: L.Layer) => {
+  const buildingPopup = (feature: { properties: Record<string, unknown> | null }, layer: L.Layer) => {
     const props = feature.properties
     const dmg = getDamageClass(props?.damage_class as number ?? 0)
     const confidence = props?.confidence as number | undefined

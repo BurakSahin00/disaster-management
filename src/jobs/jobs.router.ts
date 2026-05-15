@@ -3,6 +3,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { upload } from '../middleware/upload';
 import { createJob, getJob } from './jobs.service';
 import { requireApiKey } from '../middleware/apiKey';
+import { createAnalysis } from '../analyses/analyses.service';
 
 export const jobsRouter = Router();
 
@@ -43,8 +44,18 @@ jobsRouter.post(
       }
 
       const analysisIdRaw = (req.body?.analysisId ?? req.body?.analysis_id) as unknown;
-      const analysisId =
+      let analysisId =
         typeof analysisIdRaw === 'string' && analysisIdRaw.length > 0 ? analysisIdRaw : undefined;
+
+      // Auto-create an analysis linked to seed defaults when none is provided.
+      if (!analysisId) {
+        const analysis = await createAnalysis({
+          userId: 'system',
+          preImageId: 'image-pre',
+          postImageId: 'image-post',
+        });
+        analysisId = analysis.id;
+      }
 
       const job = await createJob(preFile, postFile, analysisId);
       res.status(202).json(job);

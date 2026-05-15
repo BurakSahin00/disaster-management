@@ -6,11 +6,14 @@ from .loader import TiffLoader
 from .segmentation import SegmentationModel
 from .damage import DamageClassifier
 from .postprocess import (
-    extract_building_polygons,
     crop_building,
     apply_damage_overlay,
-    mask_to_buildings_geojson,
+    damage_geojson_and_bbox4326,
+    extract_building_polygons,
+    rasterize_damage_labels,
     read_tiff_rgb_uint8_hwc,
+    write_change_map_sidecar,
+    write_damage_geotiff,
 )
 
 
@@ -71,16 +74,37 @@ class DamageAnalysisPipeline:
             pre_crops.append(crop_building(pre_rgb_hwc, poly, target_size=self.crop_size))
             post_crops.append(crop_building(post_rgb_hwc, poly, target_size=self.crop_size))
 
-        damage_labels = self.dmg_model.classify_batch(pre_crops, post_crops)
+        pairs = self.dmg_model.classify_batch_with_confidence(pre_crops, post_crops)
+        damage_labels = [p[0] for p in pairs]
+        confidences = [p[1] for p in pairs]
 
         # ── Çıktı ───────────────────────────────────────────────────────
-        self._save_outputs(post_rgb_hwc, polygons, damage_labels, binary_mask, output_dir, meta)
+        self._save_outputs(
+            post_rgb_hwc,
+            polygons,
+            damage_labels,
+            confidences,
+            binary_mask,
+            output_dir,
+            meta,
+            pre_path,
+        )
 
         summary = self._summarize(damage_labels)
         print(f"\nSonuç: {summary}")
         return summary
 
-    def _save_outputs(self, post_img_hwc, polygons, damage_labels, mask, output_dir, meta):
+    def _save_outputs(
+        self,
+        post_img_hwc,
+        polygons,
+        damage_labels,
+        confidences,
+        mask,
+        output_dir,
+        meta,
+        pre_path: str,
+    ):
         import cv2, json
 
         # Görsel overlay
@@ -99,29 +123,36 @@ class DamageAnalysisPipeline:
                 {
                     "id": i,
                     "damage_class": damage_labels[i],
+                    "confidence": confidences[i],
                     "bbox": list(polygons[i].bounds),
                 }
                 for i in range(len(polygons))
             ],
         }
         with open(output_dir / "report.json", "w") as f:
-            import json
             json.dump(report, f, indent=2)
 
-        # GeoJSON (georeferenced) - for PostGIS + web map layers
+        # GeoJSON + damage raster (polygon sırası = hasar modeli; PostGIS ile hizalı)
         try:
-            geojson = mask_to_buildings_geojson(
-                mask=mask,
-                transform=meta.get("transform"),
-                src_crs=meta.get("crs"),
-                damage_labels=damage_labels,
-                dst_crs="EPSG:4326",
-                min_area_px=self.min_building_area,
+            geojson, bbox4326 = damage_geojson_and_bbox4326(
+                polygons,
+                damage_labels,
+                confidences,
+                meta.get("transform"),
+                meta.get("crs"),
             )
             with open(output_dir / "buildings.geojson", "w") as f:
                 json.dump(geojson, f)
+
+            h, w = int(meta["height"]), int(meta["width"])
+            dam = rasterize_damage_labels(polygons, damage_labels, h, w)
+            dm_path = output_dir / "damage_map.tif"
+            write_damage_geotiff(str(dm_path), dam, pre_path)
+            crs = meta.get("crs")
+            crs_wkt = crs.to_wkt() if crs is not None else None
+            write_change_map_sidecar(output_dir, crs_wkt, bbox4326)
         except Exception as e:
-            print(f"[warn] buildings.geojson could not be written: {e}")
+            print(f"[warn] buildings.geojson / damage_map.tif could not be written: {e}")
 
     def _summarize(self, labels: list) -> dict:
         from collections import Counter

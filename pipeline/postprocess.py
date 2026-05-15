@@ -1,10 +1,20 @@
+import json
+from pathlib import Path
+from typing import List, Optional, Tuple
+
 import numpy as np
 import cv2
-from shapely.geometry import Polygon
-from typing import List, Tuple
+from shapely.affinity import affine_transform
+from shapely.geometry import Polygon, box, mapping
+from shapely.ops import transform as shapely_transform
+from shapely.ops import unary_union
 import rasterio
 import rasterio.features
 import rasterio.warp
+
+from .proj_env import ensure_proj_data
+
+ensure_proj_data()
 
 
 def read_tiff_rgb_uint8_hwc(path: str) -> np.ndarray:
@@ -82,7 +92,15 @@ def mask_to_buildings_geojson(
             # but keep a light filter here via pixel count estimate if available.
             pass
 
-        g4326 = rasterio.warp.transform_geom(src_crs, dst_crs, geom, precision=8) if src_crs else geom
+        if src_crs:
+            try:
+                g4326 = rasterio.warp.transform_geom(src_crs, dst_crs, geom, precision=8)
+            except Exception:
+                # If CRS transform fails (common on some Windows PROJ setups),
+                # still return geometries in source CRS to avoid breaking persistence entirely.
+                g4326 = geom
+        else:
+            g4326 = geom
         props = {"id": idx}
         if damage_labels is not None and idx < len(damage_labels):
             props["damage_class"] = int(damage_labels[idx])
@@ -170,3 +188,118 @@ def apply_damage_overlay(
         cv2.polylines(overlay, [pts], isClosed=True, color=color, thickness=2)
         cv2.fillPoly(overlay, [pts], (*color[:2], color[2] // 3))
     return overlay
+
+
+def rasterize_damage_labels(
+    polygons: List[Polygon],
+    damage_labels: List[int],
+    height: int,
+    width: int,
+    nodata: int = 255,
+) -> np.ndarray:
+    """Pre raster grid'i ile aynı (H,W): her poligon içi damage sınıfı 0–3, dışı ve delikler nodata."""
+    arr = np.full((height, width), nodata, dtype=np.uint8)
+    for poly, lab in zip(polygons, damage_labels):
+        ext = np.round(np.array(poly.exterior.coords)).astype(np.int32)
+        ext[:, 0] = np.clip(ext[:, 0], 0, width - 1)
+        ext[:, 1] = np.clip(ext[:, 1], 0, height - 1)
+        cv2.fillPoly(arr, [ext.reshape(-1, 1, 2)], int(lab))
+        for inter in poly.interiors:
+            hole = np.round(np.array(inter.coords)).astype(np.int32)
+            hole[:, 0] = np.clip(hole[:, 0], 0, width - 1)
+            hole[:, 1] = np.clip(hole[:, 1], 0, height - 1)
+            cv2.fillPoly(arr, [hole.reshape(-1, 1, 2)], int(nodata))
+    return arr
+
+
+def write_damage_geotiff(out_path: str, array_hw: np.ndarray, reference_tif_path: str, nodata: int = 255) -> None:
+    """Referans pre GeoTIFF ile aynı transform/CRS/grid; tek bant UInt8 damage katmanı."""
+    with rasterio.open(reference_tif_path) as src:
+        profile = src.profile.copy()
+        profile.update(
+            dtype=rasterio.uint8,
+            count=1,
+            compress="lzw",
+            nodata=nodata,
+        )
+        profile.pop("photometric", None)
+    with rasterio.open(out_path, "w", **profile) as dst:
+        dst.write(np.expand_dims(array_hw.astype(np.uint8), axis=0))
+
+
+def damage_geojson_and_bbox4326(
+    polygons: List[Polygon],
+    damage_classes: List[int],
+    confidences: List[float],
+    transform,
+    src_crs,
+    dst_crs: str = "EPSG:4326",
+) -> Tuple[dict, Optional[dict]]:
+    """
+    Segmentasyon polygon sırası ile aynı indeks: hasar + confidence + PostGIS ingest GeoJSON.
+    src_crs yoksa geometriler affine dünya koordinatlarında kalır; bbox4326 dönmez (null).
+    """
+    if transform is None:
+        raise ValueError("transform is required for georeferenced building outputs")
+
+    a, b, c, d, e, f = transform.a, transform.b, transform.c, transform.d, transform.e, transform.f
+    world_polys: List[Polygon] = []
+    for poly in polygons:
+        wp = affine_transform(poly, [a, b, d, e, c, f])
+        if not wp.is_valid:
+            wp = wp.buffer(0)
+        world_polys.append(wp)
+
+    geoms = []
+    if src_crs is not None:
+        import pyproj
+
+        trans = pyproj.Transformer.from_crs(src_crs, dst_crs, always_xy=True)
+
+        def _to_dst(x: float, y: float) -> Tuple[float, float]:
+            return trans.transform(x, y)
+
+        geoms = [shapely_transform(_to_dst, wp) for wp in world_polys]
+    else:
+        geoms = world_polys
+
+    features: List[dict] = []
+    for i, (geom, dc, cf) in enumerate(zip(geoms, damage_classes, confidences)):
+        gj = mapping(geom)
+        if gj.get("coordinates") is None:
+            continue
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": gj,
+                "properties": {
+                    "id": i,
+                    "damage_class": int(dc),
+                    "confidence": float(cf),
+                    "bbox_px": [float(x) for x in polygons[i].bounds],
+                },
+            }
+        )
+
+    bbox4326: Optional[dict] = None
+    if src_crs is not None and geoms:
+        u = unary_union(geoms)
+        if not u.is_empty:
+            minx, miny, maxx, maxy = u.bounds
+            bbox4326 = mapping(box(minx, miny, maxx, maxy))
+
+    return {"type": "FeatureCollection", "features": features}, bbox4326
+
+
+def write_change_map_sidecar(
+    output_dir: Path,
+    crs_wkt: Optional[str],
+    bbox4326_geojson: Optional[dict],
+) -> None:
+    """Backend'in change_maps satırı için metadata (CRS + bbox4326)."""
+    payload = {
+        "rasterFilename": "damage_map.tif",
+        "crsWkt": crs_wkt,
+        "bbox4326GeoJSON": bbox4326_geojson,
+    }
+    (output_dir / "change_map_meta.json").write_text(json.dumps(payload), encoding="utf-8")

@@ -18,7 +18,7 @@ export function useJobSocket({ jobId, onCompleted, onFailed }: UseJobSocketOptio
         const job = await apiGet<JobResponse>(`/jobs/${jobId}`)
         if (job.status === 'completed') {
           clearInterval(pollRef.current!)
-          onCompleted(job.result?.analysisId ?? '')
+          onCompleted(job.analysis_id ?? '')
         } else if (job.status === 'failed') {
           clearInterval(pollRef.current!)
           onFailed(job.error ?? 'Pipeline başarısız oldu')

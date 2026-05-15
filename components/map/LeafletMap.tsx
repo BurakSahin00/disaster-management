@@ -1,8 +1,12 @@
+'use client'
 import { useEffect, useRef } from 'react'
+import { MapContainer, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
 import { DAMAGE_CLASSES } from '@/types'
 import type { BuildingsGeoJson, GeoJsonBuilding } from '@/types'
+import { getLeafletOuterRings } from './geojsonToLeaflet'
+
+const CARTO_POSITRON = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
 
 interface LeafletMapProps {
   geojson: BuildingsGeoJson | null
@@ -11,78 +15,81 @@ interface LeafletMapProps {
   selectedId: string | number | null
 }
 
-const CARTO_POSITRON = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+function PolygonLayer({ geojson, filters, onSelectBuilding, selectedId }: LeafletMapProps) {
+  const map = useMap()
+  const layersRef = useRef<Map<string | number, { layers: L.Polygon[]; dmg: number }>>(new Map())
 
-export default function LeafletMap({ geojson, filters, onSelectBuilding, selectedId }: LeafletMapProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<L.Map | null>(null)
-  const layersRef = useRef<Map<string | number, { layer: L.Polygon; dmg: number }>>(new Map())
-
-  // Init map once
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return
-    const map = L.map(containerRef.current, { center: [37.5, 36.9], zoom: 14, zoomControl: false })
-    L.control.zoom({ position: 'bottomright' }).addTo(map)
-    L.tileLayer(CARTO_POSITRON, {
-      attribution: '© <a href="https://carto.com">CARTO</a>',
-      subdomains: 'abcd',
-      maxZoom: 19,
-    }).addTo(map)
-    mapRef.current = map
-    return () => { map.remove(); mapRef.current = null }
-  }, [])
-
-  // Draw polygons when GeoJSON changes
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !geojson) return
-
-    layersRef.current.forEach(({ layer }) => map.removeLayer(layer))
+    layersRef.current.forEach(({ layers }) => layers.forEach((layer) => map.removeLayer(layer)))
     layersRef.current.clear()
+    if (!geojson) return
 
     geojson.features.forEach((feature) => {
       const dmg = feature.properties.damage_class ?? 0
-      const clrObj = DAMAGE_CLASSES[dmg] ?? DAMAGE_CLASSES[0]
-      const coords = feature.geometry.coordinates[0].map(([lng, lat]) => [lat, lng] as [number, number])
-      const poly = L.polygon(coords, {
-        color: clrObj.color,
-        weight: 1.8,
-        fillColor: clrObj.color,
-        fillOpacity: 0.45,
-      }).addTo(map)
-
-      poly.on('click', () => onSelectBuilding(feature))
-      poly.on('mouseover', () => poly.setStyle({ fillOpacity: 0.75, weight: 2.5 }))
-      poly.on('mouseout', () => poly.setStyle({ fillOpacity: 0.45, weight: 1.8 }))
-
+      const clr = DAMAGE_CLASSES[dmg] ?? DAMAGE_CLASSES[0]
+      const polygons = getLeafletOuterRings(feature.geometry).map((coords) => {
+        const poly = L.polygon(coords, {
+          color: clr.color, weight: 1.8, fillColor: clr.color, fillOpacity: 0.45,
+        }).addTo(map)
+        poly.on('click', () => onSelectBuilding(feature))
+        poly.on('mouseover', () => poly.setStyle({ fillOpacity: 0.75, weight: 2.5 }))
+        poly.on('mouseout', () => poly.setStyle({ fillOpacity: 0.45, weight: 1.8 }))
+        return poly
+      })
       const id = feature.properties.id
-      if (id != null) layersRef.current.set(id, { layer: poly, dmg })
+      if (id != null) layersRef.current.set(id, { layers: polygons, dmg })
     })
 
     if (geojson.features.length > 0) {
-      const allCoords = geojson.features.flatMap((f) =>
-        f.geometry.coordinates[0].map(([lng, lat]) => [lat, lng] as [number, number])
+      const all = geojson.features.flatMap(f =>
+        getLeafletOuterRings(f.geometry).flat()
       )
-      map.fitBounds(L.latLngBounds(allCoords), { padding: [40, 40] })
+      map.fitBounds(L.latLngBounds(all), { padding: [40, 40] })
+    }
+
+    return () => {
+      layersRef.current.forEach(({ layers }) => layers.forEach((layer) => map.removeLayer(layer)))
+      layersRef.current.clear()
     }
   }, [geojson])
 
-  // Highlight selected
   useEffect(() => {
-    layersRef.current.forEach(({ layer }) => layer.setStyle({ weight: 1.8, fillOpacity: 0.45 }))
+    layersRef.current.forEach(({ layers }) =>
+      layers.forEach((layer) => layer.setStyle({ weight: 1.8, fillOpacity: 0.45 }))
+    )
     if (selectedId != null && layersRef.current.has(selectedId)) {
-      layersRef.current.get(selectedId)!.layer.setStyle({ weight: 3, fillOpacity: 0.85 })
+      layersRef.current
+        .get(selectedId)!
+        .layers.forEach((layer) => layer.setStyle({ weight: 3, fillOpacity: 0.85 }))
     }
   }, [selectedId])
 
-  // Apply filters
   useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-    layersRef.current.forEach(({ layer, dmg }) => {
-      filters[dmg] ? map.addLayer(layer) : map.removeLayer(layer)
+    layersRef.current.forEach(({ layers, dmg }) => {
+      layers.forEach((layer) => {
+        filters[dmg] ? map.addLayer(layer) : map.removeLayer(layer)
+      })
     })
   }, [filters])
 
-  return <div ref={containerRef} className="w-full h-full" />
+  return null
+}
+
+export default function LeafletMap(props: LeafletMapProps) {
+  return (
+    <MapContainer
+      center={[37.5745, 36.9228]}
+      zoom={14}
+      zoomControl={true}
+      style={{ width: '100%', height: '100%' }}
+    >
+      <TileLayer
+        url={CARTO_POSITRON}
+        attribution='© <a href="https://carto.com">CARTO</a>'
+        subdomains="abcd"
+        maxZoom={19}
+      />
+      <PolygonLayer {...props} />
+    </MapContainer>
+  )
 }

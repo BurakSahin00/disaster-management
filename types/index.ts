@@ -25,13 +25,16 @@ export type JobStatus = 'pending' | 'running' | 'completed' | 'failed'
 export interface JobResponse {
   id: string
   status: JobStatus
-  result?: { analysisId?: string; summary?: Record<string, number> }
+  analysis_id?: string | null
+  result?: { summary?: Record<string, number> }
   error?: string
 }
 
 export interface GeoJsonBuilding {
   type: 'Feature'
-  geometry: { type: 'Polygon'; coordinates: number[][][] }
+  geometry:
+    | { type: 'Polygon'; coordinates: number[][][] }
+    | { type: 'MultiPolygon'; coordinates: number[][][][] }
   properties: Building
 }
 

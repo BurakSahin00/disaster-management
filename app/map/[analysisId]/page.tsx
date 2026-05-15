@@ -47,8 +47,10 @@ export default function MapPage() {
   const toggleFilter = (id: number) => setFilters((f) => ({ ...f, [id]: !f[id] }))
   const geoJsonDownloadUrl = `${BASE}/analyses/${params.analysisId}/buildings.geojson`
 
+  const HEADER_H = 52
+
   return (
-    <div className="h-screen flex flex-col bg-surface">
+    <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', background: '#F7F6F3' }}>
       <Header
         center={
           <div className="flex items-center gap-1.5">
@@ -76,28 +78,27 @@ export default function MapPage() {
         }
       />
 
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 relative overflow-hidden">
-          {error ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-[#f0ede8]">
-              <div className="text-center">
-                <div className="text-[15px] font-semibold text-red-700 mb-2">GeoJSON yüklenemedi</div>
-                <div className="text-[13px] text-red-500">{error}</div>
-              </div>
-            </div>
-          ) : (
-            <LeafletMap
-              geojson={geojson}
-              filters={filters}
-              onSelectBuilding={setSelected}
-              selectedId={selected?.properties.id ?? null}
-            />
-          )}
-          <MapLegend counts={counts} filters={filters} onToggle={toggleFilter} />
-          {selected && <BuildingPopup building={selected} onClose={() => setSelected(null)} />}
-        </div>
+      {/* Map area — fixed position, explicit pixel bounds */}
+      <div style={{ position: 'fixed', top: HEADER_H, bottom: 0, left: 0, right: 300, overflow: 'hidden' }}>
+        <LeafletMap
+          geojson={geojson}
+          filters={filters}
+          onSelectBuilding={setSelected}
+          selectedId={selected?.properties.id ?? null}
+        />
+        {error && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1001] bg-white rounded-xl border border-red-200 shadow-lg px-5 py-3 text-center">
+            <div className="text-[13px] font-semibold text-red-700">GeoJSON yüklenemedi</div>
+            <div className="text-[11px] text-red-500 mt-0.5">{error}</div>
+          </div>
+        )}
+        <MapLegend counts={counts} filters={filters} onToggle={toggleFilter} />
+        {selected && <BuildingPopup building={selected} onClose={() => setSelected(null)} />}
+      </div>
 
-        <div className="w-[300px] bg-white border-l border-border flex flex-col shrink-0 overflow-hidden">
+      {/* Right panel — fixed position */}
+      <div style={{ position: 'fixed', top: HEADER_H, bottom: 0, right: 0, width: 300, overflow: 'hidden' }}
+           className="bg-white border-l border-border flex flex-col">
           <div className="flex border-b border-border shrink-0">
             {(['summary', 'filters'] as const).map((id) => (
               <button
@@ -153,8 +154,8 @@ export default function MapPage() {
               />
             )}
           </div>
-        </div>
       </div>
     </div>
   )
 }
+

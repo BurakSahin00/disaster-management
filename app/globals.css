@@ -1,8 +1,18 @@
+@import 'leaflet/dist/leaflet.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-html, body, #__next { height: 100%; }
+/* Tailwind Preflight overrides for Leaflet */
+.leaflet-container img {
+  max-width: none !important;
+}
+.leaflet-container {
+  font-family: inherit;
+}
+
+html, body, #__next { height: 100%; width: 100%; }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

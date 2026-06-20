@@ -5,6 +5,7 @@ export async function createAnalysis(input: {
   userId: string;
   preImageId: string;
   postImageId: string;
+  projectId?: string | null;
 }): Promise<Pick<Analysis, 'id' | 'status'>> {
   const id = crypto.randomUUID();
   const analysis = await analysesRepository.create({
@@ -12,6 +13,7 @@ export async function createAnalysis(input: {
     user_id: input.userId,
     pre_image_id: input.preImageId,
     post_image_id: input.postImageId,
+    project_id: input.projectId ?? null,
     status: 'pending',
   });
   return { id: analysis.id, status: analysis.status };

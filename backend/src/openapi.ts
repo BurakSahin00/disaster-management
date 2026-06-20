@@ -13,6 +13,7 @@ export const openapiSpec = {
     { name: 'Jobs' },
     { name: 'Analyses' },
     { name: 'Images' },
+    { name: 'Projects' },
     { name: 'GeoData' },
     { name: 'OGC' },
   ],
@@ -34,6 +35,19 @@ export const openapiSpec = {
                   analysisId: {
                     type: 'string',
                     description: 'Optional analysis id to link results.',
+                  },
+                  userId: {
+                    type: 'string',
+                    description: 'Owner user id for auto-created analysis (default system).',
+                  },
+                  projectId: {
+                    type: 'string',
+                    description: 'Optional existing project id to attach this run to.',
+                  },
+                  projectName: {
+                    type: 'string',
+                    description:
+                      'Optional project display name; creates/updates project for userId when analysisId is omitted.',
                   },
                 },
               },
@@ -102,6 +116,7 @@ export const openapiSpec = {
                   userId: { type: 'string' },
                   preImageId: { type: 'string' },
                   postImageId: { type: 'string' },
+                  projectId: { type: 'string', description: 'Optional project grouping id' },
                 },
               },
             },
@@ -121,6 +136,48 @@ export const openapiSpec = {
         responses: {
           '200': { description: 'Analysis' },
           '404': { description: 'Not found' },
+        },
+      },
+    },
+    '/projects': {
+      post: {
+        tags: ['Projects'],
+        summary: 'Create or return existing project by name for a user',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['userId', 'name'],
+                properties: {
+                  userId: { type: 'string' },
+                  name: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: { '201': { description: 'Created' }, '400': { description: 'Invalid request' } },
+      },
+      get: {
+        tags: ['Projects'],
+        summary: 'List projects for a user',
+        parameters: [{ name: 'userId', in: 'query', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Projects' }, '400': { description: 'Missing userId' } },
+      },
+    },
+    '/projects/{projectId}/analyses': {
+      get: {
+        tags: ['Projects'],
+        summary: 'List analyses (and latest job paths) under a project',
+        parameters: [
+          { name: 'projectId', in: 'path', required: true, schema: { type: 'string' } },
+          { name: 'userId', in: 'query', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '200': { description: 'Project + analysis rows' },
+          '404': { description: 'Project not found' },
         },
       },
     },

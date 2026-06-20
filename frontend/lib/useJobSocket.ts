@@ -7,15 +7,18 @@ interface UseJobSocketOptions {
   jobId: string
   onCompleted: (analysisId: string) => void
   onFailed: (error: string) => void
+  onLog?: (line: string) => void
 }
 
-export function useJobSocket({ jobId, onCompleted, onFailed }: UseJobSocketOptions) {
+export function useJobSocket({ jobId, onCompleted, onFailed, onLog }: UseJobSocketOptions) {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const startPolling = () => {
+    let consecutiveErrors = 0
     pollRef.current = setInterval(async () => {
       try {
         const job = await apiGet<JobResponse>(`/jobs/${jobId}`)
+        consecutiveErrors = 0
         if (job.status === 'completed') {
           clearInterval(pollRef.current!)
           onCompleted(job.analysis_id ?? '')
@@ -23,7 +26,13 @@ export function useJobSocket({ jobId, onCompleted, onFailed }: UseJobSocketOptio
           clearInterval(pollRef.current!)
           onFailed(job.error ?? 'Pipeline başarısız oldu')
         }
-      } catch {}
+      } catch {
+        consecutiveErrors++
+        if (consecutiveErrors >= 5) {
+          clearInterval(pollRef.current!)
+          onFailed('Sunucuya bağlanılamadı. Bağlantınızı kontrol edip sayfayı yenileyin.')
+        }
+      }
     }, 3000)
   }
 
@@ -38,6 +47,7 @@ export function useJobSocket({ jobId, onCompleted, onFailed }: UseJobSocketOptio
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data)
+          if (msg.type === 'job.log' && onLog) onLog(msg.line)
           if (msg.type === 'job.completed') onCompleted(msg.analysisId)
           if (msg.type === 'job.failed') onFailed(msg.error ?? 'Pipeline başarısız oldu')
         } catch {}

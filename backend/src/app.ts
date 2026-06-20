@@ -10,6 +10,8 @@ import { analysesRouter } from './analyses/analyses.router';
 import { imagesRouter } from './images/images.router';
 import { geodataRouter } from './geodata/geodata.router';
 import { ogcRouter } from './ogc/ogc.router';
+import { projectsRouter } from './projects/projects.router';
+import { authRouter } from './auth/auth.router';
 import { openapiSpec } from './openapi';
 
 export const app = express();
@@ -24,9 +26,11 @@ app.use(
 app.use(express.json());
 app.get('/openapi.json', (_req, res) => res.json(openapiSpec));
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
+app.use('/auth', authRouter);
 app.use('/jobs', jobsRouter);
 app.use('/analyses', analysesRouter);
 app.use('/images', imagesRouter);
+app.use('/projects', projectsRouter);
 app.use('/', geodataRouter);
 app.use('/ogc', ogcRouter);
 
@@ -75,11 +79,11 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   ) {
     const detail = 'detail' in err ? String((err as { detail?: unknown }).detail ?? '') : '';
     res.status(400).json({
-      error: 'Referenced record does not exist (foreign key).',
+      error: 'Belirtilen kayıt bulunamadı (yabancı anahtar ihlali).',
       ...(detail ? { detail } : {}),
     });
     return;
   }
   console.error(err);
-  res.status(500).json({ error: 'Internal server error.' });
+  res.status(500).json({ error: 'Sunucu hatası oluştu. Lütfen tekrar deneyin.' });
 });

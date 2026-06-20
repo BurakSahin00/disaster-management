@@ -23,7 +23,7 @@ export async function validateGeoTiffs(input: {
 
     const timer = setTimeout(() => {
       proc.kill();
-      reject(new Error('GeoTIFF validation timed out'));
+      reject(new Error('GeoTIFF doğrulaması zaman aşımına uğradı'));
     }, 15_000);
 
     proc.stdout.on('data', (c: Buffer) => (stdout += c.toString()));
@@ -31,19 +31,19 @@ export async function validateGeoTiffs(input: {
     proc.on('close', (code) => {
       clearTimeout(timer);
       if (!stdout.trim()) {
-        reject(new Error(stderr || `GeoTIFF validator produced no output (exit code ${code})`));
+        reject(new Error(stderr || `GeoTIFF doğrulayıcı çıktı üretemedi (çıkış kodu: ${code})`));
         return;
       }
       try {
         resolve(JSON.parse(stdout) as ValidatorResult);
       } catch {
-        reject(new Error(stderr || 'GeoTIFF validator returned invalid JSON'));
+        reject(new Error(stderr || 'GeoTIFF doğrulayıcı geçersiz JSON döndürdü'));
       }
     });
   });
 
   if (!result.ok) {
-    const msg = (result.errors ?? ['GeoTIFF validation failed']).join('; ');
+    const msg = (result.errors ?? ['GeoTIFF doğrulaması başarısız']).join('; ');
     throw new Error(`Invalid GeoTIFFs: ${msg}`);
   }
 }

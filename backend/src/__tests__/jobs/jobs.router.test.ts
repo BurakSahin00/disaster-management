@@ -5,6 +5,9 @@ import * as os from 'os';
 import * as fs from 'fs';
 
 jest.mock('../../jobs/jobs.service');
+jest.mock('../../analyses/analyses.service', () => ({
+  createAnalysis: jest.fn(),
+}));
 jest.mock('../../middleware/upload', () => ({
   upload: {
     fields: () => (req: any, _res: any, next: any) => {
@@ -18,10 +21,12 @@ jest.mock('../../middleware/upload', () => ({
 }));
 
 import { createJob, getJob } from '../../jobs/jobs.service';
+import { createAnalysis } from '../../analyses/analyses.service';
 import { jobsRouter } from '../../jobs/jobs.router';
 
 const mockCreateJob = createJob as jest.Mock;
 const mockGetJob = getJob as jest.Mock;
+const mockCreateAnalysis = createAnalysis as jest.Mock;
 
 const app = express();
 app.use(express.json());
@@ -29,6 +34,7 @@ app.use('/jobs', jobsRouter);
 
 describe('POST /jobs', () => {
   it('returns 202 with id and pending status', async () => {
+    mockCreateAnalysis.mockResolvedValue({ id: 'analysis-1', status: 'pending' });
     mockCreateJob.mockResolvedValue({ id: 'abc123', status: 'pending' });
     const res = await request(app).post('/jobs');
     expect(res.status).toBe(202);

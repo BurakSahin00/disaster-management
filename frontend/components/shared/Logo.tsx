@@ -1,6 +1,8 @@
+import Link from 'next/link'
+
 export function Logo() {
   return (
-    <div className="flex items-center gap-2.5">
+    <Link href="/" className="flex items-center gap-2.5 no-underline text-inherit">
       <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden>
         <rect width="28" height="28" rx="7" fill="#2563EB" />
         <path d="M7 21 L14 8 L21 21" stroke="white" strokeWidth="2.2" strokeLinejoin="round" fill="none" />
@@ -10,6 +12,6 @@ export function Logo() {
       <span className="font-semibold text-base tracking-tight text-text-primary">
         Disaster<span className="text-accent">Sense</span>
       </span>
-    </div>
+    </Link>
   )
 }

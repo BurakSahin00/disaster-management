@@ -6,7 +6,7 @@ def main():
     parser = argparse.ArgumentParser(description="Bina Hasar Analizi Pipeline")
     parser.add_argument("--pre", required=True, help="Afet öncesi TIFF yolu")
     parser.add_argument("--post", required=True, help="Afet sonrası TIFF yolu")
-    parser.add_argument("--seg-model", required=True, help="Segmentasyon modeli (.pth)")
+    parser.add_argument("--seg-model", required=True, help="Segmentasyon modeli: HuggingFace dizini (SegFormer) veya .pth dosyası")
     parser.add_argument("--dmg-model", required=True, help="Hasar sınıflandırma modeli (.pth)")
     parser.add_argument("--output", default="outputs", help="Çıktı klasörü")
     parser.add_argument("--tile-size", type=int, default=512)

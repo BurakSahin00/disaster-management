@@ -4,6 +4,7 @@ import { upload } from '../middleware/upload';
 import { createJob, getJob } from './jobs.service';
 import { requireApiKey } from '../middleware/apiKey';
 import { createAnalysis } from '../analyses/analyses.service';
+import { getProjectById, upsertProject } from '../projects/projects.service';
 
 export const jobsRouter = Router();
 
@@ -39,7 +40,7 @@ jobsRouter.post(
       const postFile = files?.post?.[0];
 
       if (!preFile || !postFile) {
-        res.status(400).json({ error: 'Both "pre" and "post" TIFF files are required.' });
+        res.status(400).json({ error: '"pre" ve "post" TIFF dosyalarının ikisi de zorunludur.' });
         return;
       }
 
@@ -49,10 +50,39 @@ jobsRouter.post(
 
       // Auto-create an analysis linked to seed defaults when none is provided.
       if (!analysisId) {
+        const userIdRaw = (req.body?.userId ?? req.body?.user_id) as unknown;
+        const userId =
+          typeof userIdRaw === 'string' && userIdRaw.trim().length > 0 ? userIdRaw.trim() : 'system';
+
+        const projectNameRaw = (req.body?.projectName ?? req.body?.project_name) as unknown;
+        const projectName =
+          typeof projectNameRaw === 'string' && projectNameRaw.trim().length > 0
+            ? projectNameRaw.trim()
+            : '';
+
+        const projectIdRaw = (req.body?.projectId ?? req.body?.project_id) as unknown;
+        const projectIdStr =
+          typeof projectIdRaw === 'string' && projectIdRaw.trim().length > 0
+            ? projectIdRaw.trim()
+            : '';
+
+        let projectId: string | undefined;
+        if (projectIdStr) {
+          const existing = await getProjectById(projectIdStr);
+          if (!existing) {
+            throw new Error('Validation error: Belirtilen proje bulunamadı.');
+          }
+          projectId = existing.id;
+        } else if (projectName) {
+          const p = await upsertProject({ userId, name: projectName });
+          projectId = p.id;
+        }
+
         const analysis = await createAnalysis({
-          userId: 'system',
+          userId,
           preImageId: 'image-pre',
           postImageId: 'image-post',
+          projectId,
         });
         analysisId = analysis.id;
       }
@@ -69,7 +99,7 @@ jobsRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) =
   try {
     const job = await getJob(req.params['id'] as string);
     if (!job) {
-      res.status(404).json({ error: 'Job not found.' });
+      res.status(404).json({ error: 'İş bulunamadı.' });
       return;
     }
     res.json(job);
@@ -84,14 +114,14 @@ jobsRouter.get('/:id/files/:file', async (req: Request, res: Response, next: Nex
 
     if (!ALLOWED_FILES.has(file)) {
       res.status(400).json({
-        error: `File not allowed. Valid options: ${[...ALLOWED_FILES].join(', ')}`,
+        error: `Geçersiz dosya adı. İzin verilen dosyalar: ${[...ALLOWED_FILES].join(', ')}`,
       });
       return;
     }
 
     const job = await getJob(req.params['id'] as string);
     if (!job) {
-      res.status(404).json({ error: 'Job not found.' });
+      res.status(404).json({ error: 'İş bulunamadı.' });
       return;
     }
 
@@ -99,7 +129,7 @@ jobsRouter.get('/:id/files/:file', async (req: Request, res: Response, next: Nex
     if (ct) res.type(ct);
 
     res.sendFile(file, { root: job.output_dir }, (err) => {
-      if (err) res.status(404).json({ error: 'Output file not found.' });
+      if (err) res.status(404).json({ error: 'Çıktı dosyası henüz oluşturulmamış veya bulunamadı.' });
     });
   } catch (err) {
     next(err);

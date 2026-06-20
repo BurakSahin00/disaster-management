@@ -43,6 +43,14 @@ export function createJobsRepository(db: Pool) {
       return rows[0] ?? null;
     },
 
+    async findByAnalysisId(analysisId: string): Promise<Job | null> {
+      const { rows } = await db.query<Job>(
+        'SELECT * FROM jobs WHERE analysis_id = $1 ORDER BY created_at DESC LIMIT 1',
+        [analysisId],
+      );
+      return rows[0] ?? null;
+    },
+
     async updateStatus(id: string, status: Job['status'], extra: UpdateExtra = {}): Promise<void> {
       const sets: string[] = ['status = $2'];
       const values: unknown[] = [id, status];

@@ -16,6 +16,22 @@ import { realtimeHub } from '../realtime/ws';
 
 const TIMEOUT_MS = 30 * 60 * 1000;
 
+function extractPipelineError(stderr: string, exitCode: number | null): string {
+  if (!stderr.trim()) {
+    return `Pipeline beklenmedik bir hatayla sonlandı (çıkış kodu: ${exitCode ?? 'bilinmiyor'}).`;
+  }
+  // Take the last non-empty line — for Python tracebacks this is the actual error.
+  const lines = stderr.split('\n').map((l) => l.trimEnd()).filter(Boolean);
+  const lastLine = lines[lines.length - 1] ?? '';
+  // If it looks like a Python exception line (e.g. "ValueError: ..."), show it cleanly.
+  const exceptionMatch = lastLine.match(/^(\w+(?:\.\w+)*Error|\w+Exception):\s*(.+)$/);
+  if (exceptionMatch) {
+    return `Pipeline hatası: ${exceptionMatch[2]}`;
+  }
+  // Otherwise return the last line as-is (still better than a full traceback).
+  return `Pipeline hatası: ${lastLine}`;
+}
+
 function resolvePipelineEntrypoint(): string {
   if (config.pipelineEntrypoint && config.pipelineEntrypoint.trim().length > 0) {
     return path.resolve(config.pipelineEntrypoint);
@@ -79,6 +95,13 @@ export async function runPipeline(
     });
     proc.stdout.on('data', (chunk: Buffer) => {
       process.stdout.write(chunk);
+      const lines = chunk.toString().split('\n');
+      for (const raw of lines) {
+        const line = raw.trimEnd();
+        if (line.length > 0) {
+          realtimeHub.publishToJob(jobId, { type: 'job.log', jobId, line });
+        }
+      }
     });
 
     const timer = setTimeout(() => {
@@ -91,7 +114,7 @@ export async function runPipeline(
             await analysesRepository.updateStatus(job.analysis_id, 'failed', new Date());
           }
           await jobsRepository.updateStatus(jobId, 'failed', {
-            error: 'Pipeline timed out after 30 minutes',
+            error: 'Pipeline 30 dakika içinde tamamlanamadı ve durduruldu.',
           });
         })
         .then(() => resolve())
@@ -186,14 +209,9 @@ export async function runPipeline(
           if (jobFail?.analysis_id) {
             await analysesRepository.updateStatus(jobFail.analysis_id, 'failed', new Date());
           }
-          await jobsRepository.updateStatus(jobId, 'failed', {
-            error: `Could not read report.json: ${(err as Error).message}`,
-          });
-          realtimeHub.publishToJob(jobId, {
-            type: 'job.failed',
-            jobId,
-            error: (err as Error).message,
-          });
+          const readErr = `Pipeline tamamlandı ancak sonuç dosyası okunamadı: ${(err as Error).message}`;
+          await jobsRepository.updateStatus(jobId, 'failed', { error: readErr });
+          realtimeHub.publishToJob(jobId, { type: 'job.failed', jobId, error: readErr });
         }
       } else {
         try {
@@ -201,14 +219,9 @@ export async function runPipeline(
           if (jobFail?.analysis_id) {
             await analysesRepository.updateStatus(jobFail.analysis_id, 'failed', new Date());
           }
-          await jobsRepository.updateStatus(jobId, 'failed', {
-            error: stderr || `Process exited with code ${code}`,
-          });
-          realtimeHub.publishToJob(jobId, {
-            type: 'job.failed',
-            jobId,
-            error: stderr || `Process exited with code ${code}`,
-          });
+          const errorMsg = extractPipelineError(stderr, code);
+          await jobsRepository.updateStatus(jobId, 'failed', { error: errorMsg });
+          realtimeHub.publishToJob(jobId, { type: 'job.failed', jobId, error: errorMsg });
         } catch (err) {
           console.error('Failed to mark job failed:', err);
         }

@@ -8,6 +8,7 @@ export interface Analysis {
   user_id: string;
   pre_image_id: string;
   post_image_id: string;
+  project_id: string | null;
   status: AnalysisStatus;
   created_at: Date;
   completed_at: Date | null;
@@ -15,20 +16,22 @@ export interface Analysis {
 
 type CreateInput = Pick<Analysis, 'id' | 'user_id' | 'pre_image_id' | 'post_image_id'> & {
   status?: AnalysisStatus;
+  project_id?: string | null;
 };
 
 export function createAnalysesRepository(db: Pool) {
   return {
     async create(input: CreateInput): Promise<Analysis> {
       const { rows } = await db.query<Analysis>(
-        `INSERT INTO analyses (id, user_id, pre_image_id, post_image_id, status)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO analyses (id, user_id, pre_image_id, post_image_id, project_id, status)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
         [
           input.id,
           input.user_id,
           input.pre_image_id,
           input.post_image_id,
+          input.project_id ?? null,
           input.status ?? 'pending',
         ],
       );

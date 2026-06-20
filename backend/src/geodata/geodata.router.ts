@@ -1,9 +1,13 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import { jobsRepository } from '../jobs/jobs.repository';
 import { Router, Request, Response, NextFunction } from 'express';
 import {
   getAnalysisBuildingsGeoJSONBbox,
   getAnalysisClustersGeoJSONBbox,
   getAnalysisRegionsGeoJSONBbox,
   recomputeRegionsAndClusters,
+  getPreImageForAnalysis,
 } from './geodata.service';
 import { requireApiKey } from '../middleware/apiKey';
 import { parseBody } from '../validation/zod';
@@ -92,6 +96,45 @@ geodataRouter.post(
         clusterMinCellCount: body?.clusterMinCellCount,
       });
       res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// GET /analyses/:analysisId/pre-image  →  { url, bounds } JSON metadata
+geodataRouter.get(
+  '/analyses/:analysisId/pre-image',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const analysisId = req.params['analysisId'] as string;
+      const meta = await getPreImageForAnalysis(analysisId);
+      res.json(meta);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// GET /analyses/:analysisId/pre-image.png  →  PNG binary
+geodataRouter.get(
+  '/analyses/:analysisId/pre-image.png',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const analysisId = req.params['analysisId'] as string;
+      const job = await jobsRepository.findByAnalysisId(analysisId);
+      if (!job) {
+        res.status(404).json({ error: 'No job found for this analysis' });
+        return;
+      }
+      const pngPath = path.join(job.output_dir, 'pre_preview.png');
+      if (!fs.existsSync(pngPath)) {
+        res.status(404).json({ error: 'Preview not generated yet. Call /pre-image first.' });
+        return;
+      }
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.sendFile(pngPath);
     } catch (err) {
       next(err);
     }

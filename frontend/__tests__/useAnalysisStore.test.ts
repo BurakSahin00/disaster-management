@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { useAnalysisStore } from '@/store/useAnalysisStore'
 
 beforeEach(() => {
-  useAnalysisStore.setState({ jobId: null, analysisId: null, projectName: '' })
+  useAnalysisStore.setState({ jobId: null, analysisId: null, projectId: null, projectName: '' })
 })
 
 it('setJob updates jobId and projectName', () => {

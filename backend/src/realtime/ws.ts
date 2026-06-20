@@ -5,6 +5,7 @@ type Client = import('ws').WebSocket;
 
 type Msg =
   | { type: 'job.status'; jobId: string; status: string }
+  | { type: 'job.log'; jobId: string; line: string }
   | { type: 'job.completed'; jobId: string; analysisId?: string | null }
   | { type: 'job.failed'; jobId: string; error?: string };
 

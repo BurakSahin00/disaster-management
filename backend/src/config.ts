@@ -32,4 +32,5 @@ export const config = {
     process.env.GEOTIFF_VALIDATOR_PATH ??
     path.resolve(__dirname, '..', 'scripts', 'validate_geotiff.py'),
   corsOrigin: parseCorsOrigin(),
+  jwtSecret: process.env.JWT_SECRET ?? 'disastersense-dev-secret-change-in-production',
 };

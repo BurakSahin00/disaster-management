@@ -1,0 +1,6 @@
+models/
+outputs/
+test_datas/
+*.pth
+*.safetensors
+*.bin

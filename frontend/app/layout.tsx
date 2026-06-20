@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google'
+import { AuthGuard } from '@/components/shared/AuthGuard'
 import './globals.css'
 
 const ibmPlexSans = IBM_Plex_Sans({
@@ -25,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="tr" className={`${ibmPlexSans.variable} ${ibmPlexMono.variable}`}>
       <body className="font-sans bg-surface text-text-primary antialiased h-full">
-        {children}
+        <AuthGuard>{children}</AuthGuard>
       </body>
     </html>
   )

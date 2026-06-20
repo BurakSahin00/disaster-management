@@ -1,3 +1,8 @@
+import { spawn } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import { config } from '../config';
+import { jobsRepository } from '../jobs/jobs.repository';
 import * as crypto from 'crypto';
 import { geodataRepository } from './geodata.repository';
 
@@ -110,4 +115,74 @@ export async function getAnalysisClustersGeoJSONBbox(input: {
   bbox4326?: [number, number, number, number];
 }): Promise<object> {
   return geodataRepository.getClustersGeoJSONByAnalysis(input.analysisId, input.bbox4326);
+}
+
+export interface PreImageMeta {
+  url: string;
+  bounds: [[number, number], [number, number]];
+}
+
+// In-flight preview generation promises keyed by analysisId — prevents duplicate spawns.
+const previewInFlight = new Map<string, Promise<PreImageMeta>>();
+
+function resolvePreviewScript(): string {
+  const candidates = [
+    path.resolve(__dirname, '..', '..', '..', 'pipeline', 'tools', 'tiff_preview.py'),
+    path.resolve(__dirname, '..', '..', '..', '..', 'pipeline', 'tools', 'tiff_preview.py'),
+  ];
+  const found = candidates.find((p) => fs.existsSync(p));
+  if (!found) {
+    throw new Error(
+      `tiff_preview.py not found. Tried:\n- ${candidates.join('\n- ')}`,
+    );
+  }
+  return found;
+}
+
+export async function getPreImageForAnalysis(analysisId: string): Promise<PreImageMeta> {
+  // Deduplicate concurrent calls for the same analysis.
+  const inflight = previewInFlight.get(analysisId);
+  if (inflight) return inflight;
+
+  const work = _generatePreImage(analysisId);
+  previewInFlight.set(analysisId, work);
+  work.finally(() => previewInFlight.delete(analysisId));
+  return work;
+}
+
+async function _generatePreImage(analysisId: string): Promise<PreImageMeta> {
+  const job = await jobsRepository.findByAnalysisId(analysisId);
+  if (!job) throw new Error('No job found for this analysis');
+
+  const pngPath = path.join(job.output_dir, 'pre_preview.png');
+  const boundsPath = path.join(job.output_dir, 'pre_preview_bounds.json');
+
+  if (fs.existsSync(pngPath) && fs.existsSync(boundsPath)) {
+    const bounds = JSON.parse(
+      fs.readFileSync(boundsPath, 'utf-8'),
+    ) as [[number, number], [number, number]];
+    return { url: `/analyses/${analysisId}/pre-image.png`, bounds };
+  }
+
+  const scriptPath = resolvePreviewScript();
+  const boundsJson = await new Promise<string>((resolve, reject) => {
+    let stdout = '';
+    let stderr = '';
+    const proc = spawn(config.pythonBin, [
+      scriptPath,
+      '--input', job.pre_path,
+      '--output', pngPath,
+    ]);
+    proc.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString(); });
+    proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+    proc.on('close', (code) => {
+      if (code !== 0) reject(new Error(`tiff_preview failed (code ${code}): ${stderr}`));
+      else resolve(stdout.trim());
+    });
+  });
+
+  const parsed = JSON.parse(boundsJson) as { bounds: [[number, number], [number, number]] };
+  fs.writeFileSync(boundsPath, JSON.stringify(parsed.bounds));
+
+  return { url: `/analyses/${analysisId}/pre-image.png`, bounds: parsed.bounds };
 }

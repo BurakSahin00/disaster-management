@@ -17,7 +17,10 @@ describe('apiGet', () => {
 
     const result = await apiGet('/jobs/123')
 
-    expect(fetch).toHaveBeenCalledWith('http://localhost:3001/jobs/123')
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:3001/jobs/123',
+      expect.objectContaining({ headers: expect.any(Object) }),
+    )
     expect(result).toEqual(mockData)
   })
 

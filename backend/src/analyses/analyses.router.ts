@@ -43,6 +43,7 @@ analysesRouter.post('/', requireApiKey, async (req: Request, res: Response, next
       userId: body.userId,
       preImageId: body.preImageId,
       postImageId: body.postImageId,
+      projectId: body.projectId,
     });
     res.status(201).json(analysis);
   } catch (err) {

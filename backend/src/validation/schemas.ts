@@ -4,6 +4,11 @@ export const zCreateAnalysis = z.object({
   userId: z.string().min(1),
   preImageId: z.string().min(1),
   postImageId: z.string().min(1),
+  projectId: z.string().min(1).optional(),
+});
+
+export const zUpsertProject = z.object({
+  name: z.string().min(1).max(200),
 });
 
 export const zRegisterImage = z.object({

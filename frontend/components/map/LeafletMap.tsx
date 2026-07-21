@@ -5,6 +5,9 @@ import L from 'leaflet'
 import { DAMAGE_CLASSES } from '@/types'
 import type { BuildingsGeoJson, GeoJsonBuilding, RegionsGeoJson, ClustersGeoJson } from '@/types'
 import { getLeafletOuterRings } from './geojsonToLeaflet'
+import { HeatmapLayer } from './HeatmapLayer'
+import { HotspotLayer } from './HotspotLayer'
+import type { HotspotGeoJson } from '@/types'
 
 const CARTO_POSITRON = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
 
@@ -22,13 +25,16 @@ interface LeafletMapProps {
   selectedId: string | number | null
   regionsGeojson: RegionsGeoJson | null
   clustersGeojson: ClustersGeoJson | null
-  layerVisibility: { buildings: boolean; regions: boolean; clusters: boolean }
+  layerVisibility: { buildings: boolean; regions: boolean; clusters: boolean; heatmap: boolean; hotspot: boolean }
   tiffOverlay: {
     url: string
     bounds: L.LatLngBoundsExpression
     opacity: number
     visible: boolean
   } | null
+  heatmapPoints: [number, number, number][]
+  heatmapRadius: number
+  hotspotGeojson: HotspotGeoJson | null
 }
 
 function PolygonLayer({ geojson, filters, onSelectBuilding, selectedId, visible }: {
@@ -122,8 +128,8 @@ function RegionLayer({ geojson, visible }: { geojson: RegionsGeoJson | null; vis
         })
         poly.bindTooltip(
           `<div style="font-size:12px;line-height:1.5">
-            <b>Ortalama hasar:</b> ${avg}<br/>
-            <b>Bina sayısı:</b> ${count}
+            <b>Avg. damage:</b> ${avg}<br/>
+            <b>Buildings:</b> ${count}
           </div>`,
           { sticky: true }
         )
@@ -210,9 +216,9 @@ function ClusterLayer({ geojson, visible }: { geojson: ClustersGeoJson | null; v
         })
         poly.bindTooltip(
           `<div style="font-size:12px;line-height:1.5">
-            <b>Hasar kümesi</b><br/>
-            <b>Hücre sayısı:</b> ${cells}<br/>
-            <b>Ort. şiddet:</b> ${sev}
+            <b>Damage cluster</b><br/>
+            <b>Cells:</b> ${cells}<br/>
+            <b>Avg. severity:</b> ${sev}
           </div>`,
           { sticky: true }
         )
@@ -245,6 +251,9 @@ export default function LeafletMap({
   clustersGeojson,
   layerVisibility,
   tiffOverlay,
+  heatmapPoints,
+  heatmapRadius,
+  hotspotGeojson,
 }: LeafletMapProps) {
   return (
     <MapContainer
@@ -267,6 +276,15 @@ export default function LeafletMap({
           visible={tiffOverlay.visible}
         />
       )}
+      <HeatmapLayer
+        points={heatmapPoints}
+        radius={heatmapRadius}
+        visible={layerVisibility.heatmap}
+      />
+      <HotspotLayer
+        geojson={hotspotGeojson}
+        visible={layerVisibility.hotspot}
+      />
       <RegionLayer geojson={regionsGeojson} visible={layerVisibility.regions} />
       <ClusterLayer geojson={clustersGeojson} visible={layerVisibility.clusters} />
       <PolygonLayer

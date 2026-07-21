@@ -18,11 +18,11 @@ export default function RegisterPage() {
     setError(null)
 
     if (password !== confirmPassword) {
-      setError('Şifreler eşleşmiyor')
+      setError('Passwords do not match')
       return
     }
     if (password.length < 6) {
-      setError('Şifre en az 6 karakter olmalıdır')
+      setError('Password must be at least 6 characters')
       return
     }
 
@@ -35,12 +35,12 @@ export default function RegisterPage() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error ?? 'Talep gönderilemedi')
+        setError(data.error ?? 'Request could not be submitted')
         return
       }
       setSubmitted(true)
     } catch {
-      setError('Sunucuya bağlanılamadı. Backend çalışıyor mu?')
+      setError('Could not connect to server. Is the backend running?')
     } finally {
       setLoading(false)
     }
@@ -54,9 +54,9 @@ export default function RegisterPage() {
       <div className="w-full max-w-[400px]">
         <div className="flex flex-col items-center mb-8">
           <Logo />
-          <h1 className="text-[20px] font-semibold mt-5 mb-1 text-text-primary">Kayıt Talebi</h1>
+          <h1 className="text-[20px] font-semibold mt-5 mb-1 text-text-primary">Request Access</h1>
           <p className="text-[13px] text-text-muted text-center">
-            Talebiniz admin onayından sonra aktive edilecek
+            Your request will be activated after admin approval
           </p>
         </div>
 
@@ -78,13 +78,13 @@ export default function RegisterPage() {
                 </svg>
               </div>
               <div className="text-center">
-                <p className="text-[14px] font-semibold text-text-primary">Talebiniz alındı</p>
+                <p className="text-[14px] font-semibold text-text-primary">Request received</p>
                 <p className="text-[12px] text-text-muted mt-1">
-                  Admin onayından sonra giriş yapabilirsiniz.
+                  You can log in after admin approval.
                 </p>
               </div>
               <Link href="/login" className="text-[13px] font-medium text-accent hover:underline">
-                Giriş sayfasına dön →
+                Back to login →
               </Link>
             </div>
           ) : (
@@ -98,28 +98,28 @@ export default function RegisterPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="ornek@kurum.com"
+                  placeholder="you@organization.com"
                   className={inputClass}
                 />
               </div>
 
               <div>
                 <label className="block text-[12px] font-medium text-text-muted mb-1.5">
-                  Şifre
+                  Password
                 </label>
                 <input
                   type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="En az 6 karakter"
+                  placeholder="At least 6 characters"
                   className={inputClass}
                 />
               </div>
 
               <div>
                 <label className="block text-[12px] font-medium text-text-muted mb-1.5">
-                  Şifre Tekrar
+                  Confirm Password
                 </label>
                 <input
                   type="password"
@@ -142,7 +142,7 @@ export default function RegisterPage() {
                 disabled={loading}
                 className="mt-1 py-3 rounded-xl bg-accent text-white text-[14px] font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Gönderiliyor…' : 'Talep Gönder'}
+                {loading ? 'Submitting…' : 'Submit Request'}
               </button>
             </form>
           )}
@@ -150,9 +150,9 @@ export default function RegisterPage() {
 
         {!submitted && (
           <p className="mt-4 text-[12px] text-text-muted text-center">
-            Zaten hesabınız var mı?{' '}
+            Already have an account?{' '}
             <Link href="/login" className="text-accent hover:underline font-medium">
-              Giriş yapın →
+              Sign in →
             </Link>
           </p>
         )}

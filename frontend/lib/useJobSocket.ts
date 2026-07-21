@@ -24,13 +24,13 @@ export function useJobSocket({ jobId, onCompleted, onFailed, onLog }: UseJobSock
           onCompleted(job.analysis_id ?? '')
         } else if (job.status === 'failed') {
           clearInterval(pollRef.current!)
-          onFailed(job.error ?? 'Pipeline başarısız oldu')
+          onFailed(job.error ?? 'Pipeline failed')
         }
       } catch {
         consecutiveErrors++
         if (consecutiveErrors >= 5) {
           clearInterval(pollRef.current!)
-          onFailed('Sunucuya bağlanılamadı. Bağlantınızı kontrol edip sayfayı yenileyin.')
+          onFailed('Could not connect to server. Check your connection and reload the page.')
         }
       }
     }, 3000)
@@ -49,7 +49,7 @@ export function useJobSocket({ jobId, onCompleted, onFailed, onLog }: UseJobSock
           const msg = JSON.parse(event.data)
           if (msg.type === 'job.log' && onLog) onLog(msg.line)
           if (msg.type === 'job.completed') onCompleted(msg.analysisId)
-          if (msg.type === 'job.failed') onFailed(msg.error ?? 'Pipeline başarısız oldu')
+          if (msg.type === 'job.failed') onFailed(msg.error ?? 'Pipeline failed')
         } catch {}
       }
 

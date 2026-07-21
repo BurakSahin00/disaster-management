@@ -16,8 +16,8 @@ describe('DamageChart', () => {
     const counts = { 0: 100, 1: 80, 2: 60, 3: 40 }
     const total = 280
     render(<DamageChart counts={counts} total={total} />)
-    expect(screen.getByText('Hasarsız')).toBeInTheDocument()
-    expect(screen.getByText('Yıkık')).toBeInTheDocument()
+    expect(screen.getByText('No Damage')).toBeInTheDocument()
+    expect(screen.getByText('Destroyed')).toBeInTheDocument()
   })
 })
 
@@ -27,7 +27,7 @@ describe('FilterPanel', () => {
     const filters = { 0: true, 1: true, 2: true, 3: true }
     const counts = { 0: 10, 1: 20, 2: 5, 3: 2 }
     render(<FilterPanel filters={filters} counts={counts} total={37} onToggle={onToggle} onShowAll={jest.fn()} onShowCritical={jest.fn()} />)
-    fireEvent.click(screen.getByText('Yıkık').closest('[role="button"]')!)
+    fireEvent.click(screen.getByText('Destroyed').closest('[role="button"]')!)
     expect(onToggle).toHaveBeenCalledWith(3)
   })
 })

@@ -24,7 +24,7 @@ export default function UploadPage() {
       .then((rows) => { setProjects(rows); setProjectsError(null) })
       .catch((e) => {
         setProjects([])
-        setProjectsError(e instanceof Error ? e.message : 'Projeler yüklenemedi')
+        setProjectsError(e instanceof Error ? e.message : 'Failed to load projects')
       })
   }, [])
 
@@ -46,7 +46,7 @@ export default function UploadPage() {
       setJob(job.id, project.name, project.id)
       router.push(`/jobs/${job.id}`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Dosya yüklenemedi. Backend çalışıyor mu?')
+      setError(e instanceof Error ? e.message : 'File upload failed. Is the backend running?')
       setLoading(false)
     }
   }
@@ -62,7 +62,7 @@ export default function UploadPage() {
                   href="/admin/users"
                   className="text-[11px] font-medium text-text-muted hover:text-accent transition-colors px-2 py-1 rounded-lg hover:bg-accent-light"
                 >
-                  Kullanıcılar
+                  Users
                 </Link>
               )}
               <div className="flex flex-col items-end">
@@ -73,7 +73,7 @@ export default function UploadPage() {
                 onClick={() => { logout(); router.replace('/login') }}
                 className="text-[11px] text-text-muted hover:text-red-500 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
               >
-                Çıkış
+                Logout
               </button>
             </div>
           ) : null
@@ -83,12 +83,12 @@ export default function UploadPage() {
       <div className="flex-1 w-full max-w-[1200px] mx-auto px-5 sm:px-8 py-8 lg:py-10">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
 
-          {/* Sol: TIFF yükleme */}
+          {/* Left: TIFF upload */}
           <section className="flex flex-col animate-fade-up">
             <div className="mb-5">
-              <h1 className="text-[22px] font-semibold tracking-tight mb-1">Yeni Analiz</h1>
+              <h1 className="text-[22px] font-semibold tracking-tight mb-1">New Analysis</h1>
               <p className="text-[13px] text-text-muted">
-                Pre ve post afet TIFF yükleyin. Proje adını sağdaki listeden de seçebilirsiniz.
+                Upload pre- and post-disaster TIFFs. You can also pick a project name from the list on the right.
               </p>
             </div>
             <UploadForm
@@ -98,7 +98,7 @@ export default function UploadPage() {
               presetProjectName={presetProjectName}
             />
             <div className="flex gap-3 mt-4 flex-wrap">
-              {['SegFormer segmentasyon', '4-sınıf hasar modeli', 'GeoJSON çıktı', 'PostGIS'].map((t) => (
+              {['SegFormer segmentation', '4-class damage model', 'GeoJSON output', 'PostGIS'].map((t) => (
                 <span key={t} className="text-[11px] text-text-faint flex items-center gap-1.5">
                   <svg width="6" height="6" viewBox="0 0 6 6">
                     <circle cx="3" cy="3" r="3" fill="#d1cfc8" />
@@ -109,17 +109,17 @@ export default function UploadPage() {
             </div>
           </section>
 
-          {/* Sağ: proje listesi */}
+          {/* Right: project list */}
           <aside className="flex flex-col lg:sticky lg:top-8 animate-fade-up">
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <h2 className="text-[22px] font-semibold tracking-tight">Projeler</h2>
+                <h2 className="text-[22px] font-semibold tracking-tight">Projects</h2>
                 <p className="text-[13px] text-text-muted mt-0.5">
                   {projects === null
-                    ? 'Yükleniyor…'
+                    ? 'Loading…'
                     : projects.length === 0
-                    ? 'Henüz proje yok'
-                    : `${projects.length} proje`}
+                    ? 'No projects yet'
+                    : `${projects.length} project${projects.length !== 1 ? 's' : ''}`}
                 </p>
               </div>
               <button
@@ -133,7 +133,7 @@ export default function UploadPage() {
                   <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
                   <path d="M8 16H3v5" />
                 </svg>
-                Yenile
+                Refresh
               </button>
             </div>
 
@@ -146,7 +146,7 @@ export default function UploadPage() {
 
               {projects === null && !projectsError && (
                 <div className="px-5 py-12 text-center text-[13px] text-text-muted">
-                  Yükleniyor…
+                  Loading…
                 </div>
               )}
 
@@ -158,9 +158,9 @@ export default function UploadPage() {
                     </svg>
                   </div>
                   <div>
-                    <p className="text-[13px] font-medium text-text-primary">Henüz proje yok</p>
+                    <p className="text-[13px] font-medium text-text-primary">No projects yet</p>
                     <p className="text-[12px] text-text-muted mt-0.5 leading-relaxed">
-                      Soldan bir analiz başlatarak<br />ilk projenizi oluşturun.
+                      Start an analysis on the left<br />to create your first project.
                     </p>
                   </div>
                 </div>
@@ -175,13 +175,13 @@ export default function UploadPage() {
                           type="button"
                           onClick={() => setPresetProjectName(p.name)}
                           className="text-left w-full"
-                          title="Proje adını forma uygula"
+                          title="Apply project name to form"
                         >
                           <div className="text-[13px] font-medium text-text-primary truncate group-hover:text-accent transition-colors">
                             {p.name}
                           </div>
                           <div className="text-[11px] text-text-muted mt-0.5">
-                            {p.analysis_count} analiz
+                            {p.analysis_count} {p.analysis_count === 1 ? 'analysis' : 'analyses'}
                           </div>
                         </button>
                       </div>
@@ -189,7 +189,7 @@ export default function UploadPage() {
                         href={`/projects/${p.id}`}
                         className="shrink-0 text-[11px] font-medium text-accent hover:underline px-2.5 py-1.5 rounded-lg hover:bg-accent-light transition-colors"
                       >
-                        Detay →
+                        Details →
                       </Link>
                     </li>
                   ))}
@@ -199,7 +199,7 @@ export default function UploadPage() {
 
             {projects && projects.length > 0 && (
               <p className="mt-2.5 text-[11px] text-text-faint px-1">
-                Proje adına tıklayınca &quot;Proje Adı&quot; alanı güncellenir.
+                Clicking a project name fills in the &quot;Project Name&quot; field.
               </p>
             )}
           </aside>

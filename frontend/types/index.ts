@@ -7,10 +7,10 @@ export interface DamageClass {
 }
 
 export const DAMAGE_CLASSES: DamageClass[] = [
-  { id: 0, label: 'Hasarsız',     color: '#16a34a', light: '#dcfce7', border: '#bbf7d0' },
-  { id: 1, label: 'Az Hasarlı',   color: '#65a30d', light: '#ecfccb', border: '#d9f99d' },
-  { id: 2, label: 'Ağır Hasarlı', color: '#ea580c', light: '#ffedd5', border: '#fed7aa' },
-  { id: 3, label: 'Yıkık',        color: '#dc2626', light: '#fee2e2', border: '#fecaca' },
+  { id: 0, label: 'No Damage',    color: '#16a34a', light: '#dcfce7', border: '#bbf7d0' },
+  { id: 1, label: 'Minor Damage', color: '#65a30d', light: '#ecfccb', border: '#d9f99d' },
+  { id: 2, label: 'Major Damage', color: '#ea580c', light: '#ffedd5', border: '#fed7aa' },
+  { id: 3, label: 'Destroyed',    color: '#dc2626', light: '#fee2e2', border: '#fecaca' },
 ]
 
 export interface Building {
@@ -114,4 +114,24 @@ export interface ClusterFeature {
 export interface ClustersGeoJson {
   type: 'FeatureCollection'
   features: ClusterFeature[]
+}
+
+export interface HotspotProperties {
+  region_id: string
+  z_score: number
+  p_value: number
+  confidence: string
+}
+
+export interface HotspotFeature {
+  type: 'Feature'
+  geometry:
+    | { type: 'Polygon'; coordinates: number[][][] }
+    | { type: 'MultiPolygon'; coordinates: number[][][][] }
+  properties: HotspotProperties
+}
+
+export interface HotspotGeoJson {
+  type: 'FeatureCollection'
+  features: HotspotFeature[]
 }

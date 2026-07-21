@@ -28,13 +28,13 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error ?? 'Giriş başarısız')
+        setError(data.error ?? 'Login failed')
         return
       }
       login(data.token, data.user)
       router.replace('/')
     } catch {
-      setError('Sunucuya bağlanılamadı. Backend çalışıyor mu?')
+      setError('Could not connect to server. Is the backend running?')
     } finally {
       setLoading(false)
     }
@@ -45,9 +45,9 @@ export default function LoginPage() {
       <div className="w-full max-w-[400px]">
         <div className="flex flex-col items-center mb-8">
           <Logo />
-          <h1 className="text-[20px] font-semibold mt-5 mb-1 text-text-primary">Sisteme Giriş</h1>
+          <h1 className="text-[20px] font-semibold mt-5 mb-1 text-text-primary">Sign In</h1>
           <p className="text-[13px] text-text-muted text-center">
-            Hasar analizi yapmak için hesabınıza giriş yapın
+            Sign in to your account to run damage analyses
           </p>
         </div>
 
@@ -69,7 +69,7 @@ export default function LoginPage() {
 
             <div>
               <label className="block text-[12px] font-medium text-text-muted mb-1.5">
-                Şifre
+                Password
               </label>
               <input
                 type="password"
@@ -92,32 +92,32 @@ export default function LoginPage() {
               disabled={loading}
               className="mt-1 py-3 rounded-xl bg-accent text-white text-[14px] font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Giriş yapılıyor…' : 'Giriş Yap'}
+              {loading ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
 
           <div className="mt-5 pt-4 border-t border-border">
             <p className="text-[11px] text-text-faint text-center">
-              Varsayılan: <span className="font-mono">admin@disastersense.local</span> / <span className="font-mono">admin123</span>
+              Default: <span className="font-mono">admin@disastersense.local</span> / <span className="font-mono">admin123</span>
             </p>
             <p className="text-[10px] text-text-faint text-center mt-1">
-              Üretim ortamında şifreyi değiştirin
+              Change the password in production
             </p>
           </div>
         </div>
 
         <p className="mt-4 text-[12px] text-text-muted text-center">
-          Hesabınız yok mu?{' '}
+          Don&apos;t have an account?{' '}
           <Link href="/register" className="text-accent hover:underline font-medium">
-            Talep gönderin →
+            Request access →
           </Link>
         </p>
 
         <div className="mt-4 flex justify-center gap-3">
           {[
-            { role: 'admin', color: '#dc2626', label: 'Yönetici' },
-            { role: 'analyst', color: '#2563EB', label: 'Analist' },
-            { role: 'viewer', color: '#6b7280', label: 'İzleyici' },
+            { role: 'admin', color: '#dc2626', label: 'Admin' },
+            { role: 'analyst', color: '#2563EB', label: 'Analyst' },
+            { role: 'viewer', color: '#6b7280', label: 'Viewer' },
           ].map(({ role, color, label }) => (
             <div key={role} className="flex items-center gap-1.5 text-[11px] text-text-muted">
               <div className="w-2 h-2 rounded-full" style={{ background: color }} />

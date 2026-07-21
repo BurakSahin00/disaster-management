@@ -22,7 +22,7 @@ export default function ProjectDetailPage() {
     if (!params.projectId) return
     apiGet<ProjectAnalysesResponse>(`/projects/${params.projectId}/analyses`)
       .then(setData)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Yüklenemedi'))
+      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
   }, [params.projectId])
 
   return (
@@ -38,28 +38,28 @@ export default function ProjectDetailPage() {
         right={
           <div className="flex items-center gap-3">
             <Link href="/projects" className="text-[12px] text-text-muted hover:text-accent">
-              Tüm projeler
+              All projects
             </Link>
             <Link href="/" className="text-[12px] font-medium text-accent hover:underline">
-              Yeni analiz
+              New analysis
             </Link>
           </div>
         }
       />
       <div className="flex-1 w-full max-w-[1000px] mx-auto px-6 py-8">
-        <h1 className="text-[20px] font-semibold mb-1">Proje analizleri</h1>
+        <h1 className="text-[20px] font-semibold mb-1">Project Analyses</h1>
         <p className="text-[13px] text-[#6b6864] mb-6">
-          Bu proje altında kayıtlı tüm TIFF çiftleri ve durumları. Tamamlanan analizlerde haritaya gidebilirsiniz.
+          All TIFF pairs and their statuses under this project. You can open the map for completed analyses.
         </p>
         {error && (
           <div className="mb-4 px-4 py-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700">
             {error}
           </div>
         )}
-        {!data && !error && <div className="text-[13px] text-text-muted">Yükleniyor…</div>}
+        {!data && !error && <div className="text-[13px] text-text-muted">Loading…</div>}
         {data && data.items.length === 0 && (
           <div className="text-[13px] text-text-muted border border-border rounded-xl p-8 text-center bg-white">
-            Bu projede henüz analiz yok.
+            No analyses in this project yet.
           </div>
         )}
         {data && data.items.length > 0 && (
@@ -67,11 +67,11 @@ export default function ProjectDetailPage() {
             <table className="w-full text-left text-[12px]">
               <thead className="bg-[#faf9f7] text-text-muted border-b border-border">
                 <tr>
-                  <th className="px-3 py-2.5 font-medium">Durum</th>
+                  <th className="px-3 py-2.5 font-medium">Status</th>
                   <th className="px-3 py-2.5 font-medium">Pre TIFF</th>
                   <th className="px-3 py-2.5 font-medium">Post TIFF</th>
-                  <th className="px-3 py-2.5 font-medium">Tarih</th>
-                  <th className="px-3 py-2.5 font-medium text-right">İşlem</th>
+                  <th className="px-3 py-2.5 font-medium">Date</th>
+                  <th className="px-3 py-2.5 font-medium text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -91,8 +91,8 @@ export default function ProjectDetailPage() {
                     </td>
                     <td className="px-3 py-2.5 text-text-muted whitespace-nowrap">
                       {row.job_created_at
-                        ? new Date(row.job_created_at).toLocaleString('tr-TR')
-                        : new Date(row.analysis_created_at).toLocaleString('tr-TR')}
+                        ? new Date(row.job_created_at).toLocaleString('en-US')
+                        : new Date(row.analysis_created_at).toLocaleString('en-US')}
                     </td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
                       {row.job_id && (
@@ -100,7 +100,7 @@ export default function ProjectDetailPage() {
                           href={`/jobs/${row.job_id}`}
                           className="text-accent font-medium hover:underline mr-2"
                         >
-                          İş
+                          Job
                         </Link>
                       )}
                       {row.analysis_status === 'completed' && (
@@ -108,7 +108,7 @@ export default function ProjectDetailPage() {
                           href={`/map/${row.analysis_id}`}
                           className="text-accent font-medium hover:underline"
                         >
-                          Harita
+                          Map
                         </Link>
                       )}
                     </td>

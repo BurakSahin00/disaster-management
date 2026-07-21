@@ -21,13 +21,13 @@ export function BuildingPopup({ building, onClose }: BuildingPopupProps) {
   const confPct = p.confidence != null ? Math.round(p.confidence * 100) : null
 
   const rows: [string, string][] = [
-    ...(p.area_m2 != null ? [['Alan', `~${p.area_m2} m²`] as [string, string]] : []),
+    ...(p.area_m2 != null ? [['Area', `~${p.area_m2} m²`] as [string, string]] : []),
   ]
 
   return (
     <div className="absolute top-3 left-4 z-[1000] w-[230px] bg-white rounded-xl border border-border shadow-lg animate-fade-up overflow-hidden">
       <div className="px-3.5 py-2.5 border-b border-[#f0ede8] flex justify-between items-center">
-        <span className="text-[12px] font-semibold">Bina #{p.id}</span>
+        <span className="text-[12px] font-semibold">Building #{p.id}</span>
         <button onClick={onClose} className="text-text-faint text-lg leading-none hover:text-text-primary">×</button>
       </div>
       <div className="px-3.5 py-2.5">
@@ -38,12 +38,12 @@ export function BuildingPopup({ building, onClose }: BuildingPopupProps) {
         {confPct != null && (
           <div className="mb-2.5 pb-2.5 border-b border-[#f4f2ef]">
             <div className="flex justify-between items-center mb-1">
-              <span className="text-[11px] text-text-muted">Model Güveni</span>
+              <span className="text-[11px] text-text-muted">Model Confidence</span>
               <span
                 className="text-[12px] font-semibold font-mono"
                 style={{ color: confidenceColor(confPct) }}
               >
-                %{confPct}
+                {confPct}%
               </span>
             </div>
             <div className="h-[5px] rounded-full bg-[#f0ede8] overflow-hidden">
@@ -65,7 +65,7 @@ export function BuildingPopup({ building, onClose }: BuildingPopupProps) {
           </div>
         ))}
         {rows.length === 0 && confPct == null && (
-          <div className="text-[11px] text-text-faint">Ek özellik yok</div>
+          <div className="text-[11px] text-text-faint">No additional properties</div>
         )}
       </div>
     </div>

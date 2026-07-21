@@ -2,15 +2,9 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { RegionsGeoJson, ClustersGeoJson } from '@/types'
 
-// jsPDF uses Helvetica which lacks Turkish glyphs — replace before rendering
+// Identity function — kept for call-site compatibility; no longer needed since all text is ASCII
 function tr(s: string): string {
   return s
-    .replace(/ğ/g, 'g').replace(/Ğ/g, 'G')
-    .replace(/ş/g, 's').replace(/Ş/g, 'S')
-    .replace(/ı/g, 'i').replace(/İ/g, 'I')
-    .replace(/ö/g, 'o').replace(/Ö/g, 'O')
-    .replace(/ü/g, 'u').replace(/Ü/g, 'U')
-    .replace(/ç/g, 'c').replace(/Ç/g, 'C')
 }
 
 const BLUE   = [37,  99,  235] as const
@@ -22,10 +16,10 @@ const GRAY   = [107, 114, 128] as const
 const LGRAY  = [243, 244, 246] as const
 
 const DAMAGE: { label: string; rgb: readonly [number, number, number] }[] = [
-  { label: 'Hasarsiz',      rgb: GREEN  },
-  { label: 'Az Hasarli',    rgb: LIME   },
-  { label: 'Agir Hasarli',  rgb: ORANGE },
-  { label: 'Yikik',         rgb: RED    },
+  { label: 'No Damage',    rgb: GREEN  },
+  { label: 'Minor Damage', rgb: LIME   },
+  { label: 'Major Damage', rgb: ORANGE },
+  { label: 'Destroyed',    rgb: RED    },
 ]
 
 export interface ReportInput {
@@ -124,14 +118,14 @@ function drawHeader(doc: jsPDF, projectName: string) {
   doc.setTextColor(255, 255, 255)
   doc.setFontSize(14)
   doc.setFont('helvetica', 'bold')
-  doc.text('Deprem Hasar Analiz Raporu', 14, 10)
+  doc.text('Earthquake Damage Analysis Report', 14, 10)
 
   doc.setFontSize(7.5)
   doc.setFont('helvetica', 'normal')
-  doc.text(tr('DisasterSense — ML Destekli Bina Hasar Degerlendirme Sistemi'), 14, 17)
+  doc.text('DisasterSense — ML-Powered Building Damage Assessment System', 14, 17)
 
   // Date top-right
-  const now = new Date().toLocaleString('tr-TR', { dateStyle: 'long', timeStyle: 'short' })
+  const now = new Date().toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' })
   doc.text(tr(now), W - 14, 17, { align: 'right' })
 
   // Project name band
@@ -140,7 +134,7 @@ function drawHeader(doc: jsPDF, projectName: string) {
   setColor(doc, BLUE, 'text')
   doc.setFontSize(10)
   doc.setFont('helvetica', 'bold')
-  doc.text(tr(projectName || 'Isimsiz Proje'), 14, 32)
+  doc.text(projectName || 'Unnamed Project', 14, 32)
 }
 
 function drawFooter(doc: jsPDF, pageNum: number, totalPages: number) {
@@ -153,15 +147,15 @@ function drawFooter(doc: jsPDF, pageNum: number, totalPages: number) {
   setColor(doc, GRAY, 'text')
   doc.setFontSize(7.5)
   doc.setFont('helvetica', 'normal')
-  doc.text('DisasterSense — Gizli / Kurumsal Kullanim', 14, H - 4.5)
-  doc.text(`Sayfa ${pageNum} / ${totalPages}`, W - 14, H - 4.5, { align: 'right' })
+  doc.text('DisasterSense — Confidential / Internal Use', 14, H - 4.5)
+  doc.text(`Page ${pageNum} / ${totalPages}`, W - 14, H - 4.5, { align: 'right' })
 }
 
 function riskLabel(damagedPct: number): { text: string; rgb: readonly [number, number, number] } {
-  if (damagedPct >= 50) return { text: 'COK YUKSEK', rgb: RED }
-  if (damagedPct >= 30) return { text: 'YUKSEK',     rgb: ORANGE }
-  if (damagedPct >= 10) return { text: 'ORTA',        rgb: LIME }
-  return                       { text: 'DUSUK',       rgb: GREEN }
+  if (damagedPct >= 50) return { text: 'VERY HIGH', rgb: RED }
+  if (damagedPct >= 30) return { text: 'HIGH',      rgb: ORANGE }
+  if (damagedPct >= 10) return { text: 'MODERATE',  rgb: LIME }
+  return                       { text: 'LOW',        rgb: GREEN }
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -175,20 +169,20 @@ export function generateDamageReport(input: ReportInput): void {
 
   let y = 42
 
-  // ── Meta bilgi (iki sütun) ────────────────────────────────────────────
+  // ── Meta info (two columns) ───────────────────────────────────────────
   const metaLeft  = [
-    ['Analiz ID',         analysisId.slice(0, 18) + '…'],
-    ['Koordinat Sistemi', 'EPSG:4326 (WGS 84)'],
+    ['Analysis ID',       analysisId.slice(0, 18) + '…'],
+    ['Coordinate System', 'EPSG:4326 (WGS 84)'],
   ]
   const metaRight = [
-    ['Rapor Tarihi', tr(new Date().toLocaleDateString('tr-TR', { dateStyle: 'long' }))],
-    ['Model',        tr('SegFormer + 4-sinif hasar siniflandirici')],
+    ['Report Date', new Date().toLocaleDateString('en-US', { dateStyle: 'long' })],
+    ['Model',       'SegFormer + 4-class damage classifier'],
   ]
   const colW = (W - 28 - 6) / 2
 
   autoTable(doc, {
     startY: y,
-    head: [['Alan', 'Deger']],
+    head: [['Field', 'Value']],
     body: metaLeft,
     theme: 'plain',
     headStyles: { fillColor: [235, 238, 255], textColor: [60, 60, 60], fontStyle: 'bold', fontSize: 7.5, cellPadding: 2 },
@@ -200,7 +194,7 @@ export function generateDamageReport(input: ReportInput): void {
 
   autoTable(doc, {
     startY: y,
-    head: [['Alan', 'Deger']],
+    head: [['Field', 'Value']],
     body: metaRight,
     theme: 'plain',
     headStyles: { fillColor: [235, 238, 255], textColor: [60, 60, 60], fontStyle: 'bold', fontSize: 7.5, cellPadding: 2 },
@@ -212,7 +206,7 @@ export function generateDamageReport(input: ReportInput): void {
 
   y = doc.lastAutoTable.finalY + 8
 
-  // ── İstatistik kartları ───────────────────────────────────────────────
+  // ── Summary cards ────────────────────────────────────────────────────
   const damaged    = (counts[2] ?? 0) + (counts[3] ?? 0)
   const safe       = (counts[0] ?? 0) + (counts[1] ?? 0)
   const damagedPct = total > 0 ? Math.round((damaged / total) * 100) : 0
@@ -221,10 +215,10 @@ export function generateDamageReport(input: ReportInput): void {
   const cardW = (W - 28 - 9) / 4
   const cardH = 22
   const cards = [
-    { value: String(total),           label: 'TOPLAM BINA',   sub: 'Tespit edilen',    rgb: BLUE   },
-    { value: String(safe),            label: 'GUVENLI',        sub: `%${safePct} oran`, rgb: GREEN  },
-    { value: String(damaged),         label: 'ETKILENEN',      sub: `%${damagedPct} oran`, rgb: ORANGE },
-    { value: String(counts[3] ?? 0),  label: 'YIKIK',          sub: `%${total > 0 ? Math.round(((counts[3]??0)/total)*100) : 0} oran`, rgb: RED },
+    { value: String(total),           label: 'TOTAL BUILDINGS', sub: 'Detected',          rgb: BLUE   },
+    { value: String(safe),            label: 'SAFE',            sub: `${safePct}%`,        rgb: GREEN  },
+    { value: String(damaged),         label: 'AFFECTED',        sub: `${damagedPct}%`,     rgb: ORANGE },
+    { value: String(counts[3] ?? 0),  label: 'DESTROYED',       sub: `${total > 0 ? Math.round(((counts[3]??0)/total)*100) : 0}%`, rgb: RED },
   ] as const
   cards.forEach((c, i) => {
     statCard(doc, 14 + i * (cardW + 3), y, cardW, cardH, c.rgb, c.value, c.label, c.sub)
@@ -238,11 +232,11 @@ export function generateDamageReport(input: ReportInput): void {
   doc.setTextColor(255, 255, 255)
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
-  doc.text(`GENEL HASAR RISKI: ${risk.text}  —  ${damagedPct}% bina etkilendi`, W / 2, y + 6.5, { align: 'center' })
+  doc.text(`OVERALL DAMAGE RISK: ${risk.text}  —  ${damagedPct}% of buildings affected`, W / 2, y + 6.5, { align: 'center' })
   y += 16
 
-  // ── Hasar Sınıfı Dağılımı ─────────────────────────────────────────────
-  y = sectionTitle(doc, '1. Hasar Sinifi Dagilimi', y)
+  // ── Damage Class Distribution ─────────────────────────────────────────
+  y = sectionTitle(doc, '1. Damage Class Distribution', y)
 
   DAMAGE.forEach((d, i) => {
     const cnt = counts[i] ?? 0
@@ -272,7 +266,7 @@ export function generateDamageReport(input: ReportInput): void {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
     setColor(doc, GRAY, 'text')
-    doc.text(`${cnt} bina  ${pctLabel}`, barX + barW - 2, y + 4, { align: 'right' })
+    doc.text(`${cnt} bldgs  ${pctLabel}`, barX + barW - 2, y + 4, { align: 'right' })
 
     // Bar
     const trackX = barX + 40
@@ -283,16 +277,16 @@ export function generateDamageReport(input: ReportInput): void {
   })
   y += 8
 
-  // ── Bölge Analizi ──────────────────────────────────────────────────────
+  // ── Region Analysis ────────────────────────────────────────────────────
   if (y > 235) { doc.addPage(); drawHeader(doc, projectName); y = 42 }
 
-  y = sectionTitle(doc, '2. Bolge Analizi (Izgara)', y)
+  y = sectionTitle(doc, '2. Region Analysis (Grid)', y)
 
   if (regionCount === 0 || !regionsGeojson) {
     setColor(doc, GRAY, 'text')
     doc.setFontSize(8.5)
     doc.setFont('helvetica', 'italic')
-    doc.text('Bolge verisi henuz hesaplanmamis veya mevcut degil.', 14, y)
+    doc.text('Region data not yet computed or not available.', 14, y)
     y += 8
   } else {
     const sevs      = regionsGeojson.features.map((f) => f.properties.severity ?? 0)
@@ -302,13 +296,13 @@ export function generateDamageReport(input: ReportInput): void {
 
     autoTable(doc, {
       startY: y,
-      head: [['Metrik', 'Deger', 'Aciklama']],
+      head: [['Metric', 'Value', 'Description']],
       body: [
-        ['Toplam Hucre',          String(regionCount),     'Izgara bolge sayisi'],
-        ['Ort. Hasar Siddeti',    avgSev.toFixed(3),       '0=Hasarsiz, 3=Yikik'],
-        ['Max. Hasar Siddeti',    maxSev.toFixed(3),       'En cok etkilenen hucre'],
-        ['Kritik Hucre (>=2.0)',  String(critical),        `${regionCount > 0 ? Math.round(critical/regionCount*100) : 0}% kritik bolge`],
-        ['Hasar Kumesi Sayisi',   String(clusterCount),    'DBSCAN kume sonucu'],
+        ['Total Cells',            String(regionCount),     'Grid region count'],
+        ['Avg. Damage Severity',   avgSev.toFixed(3),       '0=No Damage, 3=Destroyed'],
+        ['Max. Damage Severity',   maxSev.toFixed(3),       'Most affected cell'],
+        ['Critical Cells (>=2.0)', String(critical),        `${regionCount > 0 ? Math.round(critical/regionCount*100) : 0}% critical zones`],
+        ['Damage Cluster Count',   String(clusterCount),    'DBSCAN cluster result'],
       ],
       theme: 'grid',
       headStyles: { fillColor: [...ORANGE] as [number,number,number], textColor: [255,255,255], fontSize: 8.5, fontStyle: 'bold' },
@@ -320,16 +314,16 @@ export function generateDamageReport(input: ReportInput): void {
     y = doc.lastAutoTable.finalY + 8
   }
 
-  // ── Küme Analizi ───────────────────────────────────────────────────────
+  // ── Cluster Analysis ───────────────────────────────────────────────────
   if (y > 220) { doc.addPage(); drawHeader(doc, projectName); y = 42 }
 
-  y = sectionTitle(doc, '3. Kume Analizi (DBSCAN)', y)
+  y = sectionTitle(doc, '3. Cluster Analysis (DBSCAN)', y)
 
   if (clusterCount === 0 || !clustersGeojson) {
     setColor(doc, GRAY, 'text')
     doc.setFontSize(8.5)
     doc.setFont('helvetica', 'italic')
-    doc.text('Kume verisi henuz hesaplanmamis veya mevcut degil.', 14, y)
+    doc.text('Cluster data not yet computed or not available.', 14, y)
     y += 8
   } else {
     const rows = clustersGeojson.features.map((f, i) => {
@@ -345,7 +339,7 @@ export function generateDamageReport(input: ReportInput): void {
 
     autoTable(doc, {
       startY: y,
-      head: [['Kume No', 'Hucre Sayisi', 'Ort. Siddet', 'Risk']],
+      head: [['Cluster #', 'Cell Count', 'Avg. Severity', 'Risk']],
       body: rows,
       theme: 'grid',
       headStyles: { fillColor: [124, 58, 237], textColor: [255,255,255], fontSize: 8.5, fontStyle: 'bold' },
@@ -358,7 +352,7 @@ export function generateDamageReport(input: ReportInput): void {
       didDrawCell: (data) => {
         if (data.section === 'body' && data.column.index === 3) {
           const risk = rows[data.row.index]?.[3]
-          const rgb = risk === 'COK YUKSEK' ? RED : risk === 'YUKSEK' ? ORANGE : risk === 'ORTA' ? LIME : GREEN
+          const rgb = risk === 'VERY HIGH' ? RED : risk === 'HIGH' ? ORANGE : risk === 'MODERATE' ? LIME : GREEN
           setColor(doc, rgb, 'fill')
           doc.roundedRect(data.cell.x + 1, data.cell.y + 1.5, data.cell.width - 2, data.cell.height - 3, 1, 1, 'F')
           doc.setTextColor(255, 255, 255)
@@ -373,27 +367,27 @@ export function generateDamageReport(input: ReportInput): void {
     y = doc.lastAutoTable.finalY + 8
   }
 
-  // ── Yasal not ─────────────────────────────────────────────────────────
+  // ── Legal disclaimer ──────────────────────────────────────────────────
   if (y > 245) { doc.addPage(); drawHeader(doc, projectName); y = 42 }
   setColor(doc, LGRAY, 'fill')
   doc.roundedRect(14, y, W - 28, 16, 2, 2, 'F')
   setColor(doc, GRAY, 'text')
   doc.setFontSize(7)
   doc.setFont('helvetica', 'italic')
-  const note = tr(
-    'Bu rapor otomatik ML analizi sonucunda uretilmistir. Sonuclar tahmine dayalidir ve saha dogrulamasi gerektirmektedir. ' +
-    'Resmi karar alma sureclerinde uzman degerlendirmesiyle birlikte kullanilmalidir.'
+  const note = (
+    'This report was generated by automated ML analysis. Results are estimates and require field validation. ' +
+    'For official decision-making, use in conjunction with expert assessment.'
   )
   const lines = doc.splitTextToSize(note, W - 36)
   doc.text(lines, 20, y + 6)
 
-  // ── Footer tüm sayfalara ──────────────────────────────────────────────
+  // ── Footer on all pages ───────────────────────────────────────────────
   const totalPages = (doc.internal as unknown as { pages: unknown[] }).pages.length - 1
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i)
     drawFooter(doc, i, totalPages)
   }
 
-  const filename = tr(`hasar_raporu_${analysisId.slice(0, 8)}_${new Date().toISOString().slice(0, 10)}.pdf`)
+  const filename = `damage_report_${analysisId.slice(0, 8)}_${new Date().toISOString().slice(0, 10)}.pdf`
   doc.save(filename)
 }

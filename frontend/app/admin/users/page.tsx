@@ -23,9 +23,9 @@ interface ActiveUser {
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  admin: 'Yönetici',
-  analyst: 'Analist',
-  viewer: 'İzleyici',
+  admin: 'Admin',
+  analyst: 'Analyst',
+  viewer: 'Viewer',
 }
 
 const ROLE_BADGE: Record<string, string> = {
@@ -62,7 +62,7 @@ export default function AdminUsersPage() {
         setRequests(reqs)
         setUsers(activeUsers)
       })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Veriler yüklenemedi'))
+      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load data'))
       .finally(() => setLoading(false))
   }, [user, router])
 
@@ -78,7 +78,7 @@ export default function AdminUsersPage() {
     } catch (e) {
       setActionError((prev) => ({
         ...prev,
-        [id]: e instanceof Error ? e.message : 'İşlem başarısız',
+        [id]: e instanceof Error ? e.message : 'Operation failed',
       }))
     } finally {
       setActionLoading((prev) => ({ ...prev, [id]: false }))
@@ -96,7 +96,7 @@ export default function AdminUsersPage() {
     } catch (e) {
       setActionError((prev) => ({
         ...prev,
-        [id]: e instanceof Error ? e.message : 'İşlem başarısız',
+        [id]: e instanceof Error ? e.message : 'Operation failed',
       }))
     } finally {
       setActionLoading((prev) => ({ ...prev, [id]: false }))
@@ -117,7 +117,7 @@ export default function AdminUsersPage() {
                 onClick={() => { logout(); router.replace('/login') }}
                 className="text-[11px] text-text-muted hover:text-red-500 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
               >
-                Çıkış
+                Logout
               </button>
             </div>
           ) : null
@@ -127,9 +127,9 @@ export default function AdminUsersPage() {
       <div className="flex-1 w-full max-w-[900px] mx-auto px-5 py-8">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-[22px] font-semibold tracking-tight">Kullanıcı Yönetimi</h1>
+            <h1 className="text-[22px] font-semibold tracking-tight">User Management</h1>
             <p className="text-[13px] text-text-muted mt-1">
-              Kayıt taleplerini onaylayın veya reddedin.
+              Approve or reject registration requests.
             </p>
           </div>
           <Link
@@ -150,13 +150,13 @@ export default function AdminUsersPage() {
               }`}
             >
               {t === 'pending'
-                ? `Bekleyen Talepler${requests.length > 0 ? ` (${requests.length})` : ''}`
-                : `Aktif Kullanıcılar${users.length > 0 ? ` (${users.length})` : ''}`}
+                ? `Pending Requests${requests.length > 0 ? ` (${requests.length})` : ''}`
+                : `Active Users${users.length > 0 ? ` (${users.length})` : ''}`}
             </button>
           ))}
         </div>
 
-        {loading && <p className="text-[13px] text-text-muted">Yükleniyor…</p>}
+        {loading && <p className="text-[13px] text-text-muted">Loading…</p>}
 
         {error && (
           <div className="text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-lg px-4 py-3 mb-4">
@@ -168,7 +168,7 @@ export default function AdminUsersPage() {
           <div className="flex flex-col gap-3">
             {requests.length === 0 && (
               <div className="bg-white border border-border rounded-2xl px-6 py-12 text-center text-[13px] text-text-muted">
-                Bekleyen kayıt talebi yok.
+                No pending registration requests.
               </div>
             )}
             {requests.map((req) => (
@@ -180,11 +180,11 @@ export default function AdminUsersPage() {
                   <div>
                     <p className="text-[14px] font-medium text-text-primary">{req.email}</p>
                     <p className="text-[11px] text-text-muted mt-0.5">
-                      {new Date(req.created_at).toLocaleString('tr-TR')}
+                      {new Date(req.created_at).toLocaleString('en-US')}
                     </p>
                   </div>
                   <span className="text-[11px] px-2.5 py-1 rounded-full bg-yellow-50 text-yellow-700 border border-yellow-200 font-medium shrink-0">
-                    Bekliyor
+                    Pending
                   </span>
                 </div>
 
@@ -214,7 +214,7 @@ export default function AdminUsersPage() {
                     disabled={actionLoading[req.id]}
                     className="px-4 py-2 rounded-lg bg-accent text-white text-[12px] font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
                   >
-                    {actionLoading[req.id] ? 'İşleniyor…' : 'Onayla'}
+                    {actionLoading[req.id] ? 'Processing…' : 'Approve'}
                   </button>
 
                   {!showRejectInput[req.id] ? (
@@ -225,13 +225,13 @@ export default function AdminUsersPage() {
                       disabled={actionLoading[req.id]}
                       className="px-4 py-2 rounded-lg border border-border text-[12px] font-medium text-text-muted hover:text-red-600 hover:border-red-200 transition-colors disabled:opacity-50"
                     >
-                      Reddet
+                      Reject
                     </button>
                   ) : (
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <input
                         type="text"
-                        placeholder="Red sebebi (opsiyonel)"
+                        placeholder="Reason for rejection (optional)"
                         value={rejectReason[req.id] ?? ''}
                         onChange={(e) =>
                           setRejectReason((prev) => ({ ...prev, [req.id]: e.target.value }))
@@ -251,7 +251,7 @@ export default function AdminUsersPage() {
                         }
                         className="text-[11px] text-text-muted hover:text-text-primary px-2 shrink-0"
                       >
-                        İptal
+                        Cancel
                       </button>
                     </div>
                   )}
@@ -265,7 +265,7 @@ export default function AdminUsersPage() {
           <div className="bg-white border border-border rounded-2xl overflow-hidden">
             {users.length === 0 && (
               <p className="px-6 py-12 text-center text-[13px] text-text-muted">
-                Aktif kullanıcı yok.
+                No active users.
               </p>
             )}
             {users.length > 0 && (
@@ -276,10 +276,10 @@ export default function AdminUsersPage() {
                       E-posta
                     </th>
                     <th className="text-left px-5 py-3 text-[11px] font-semibold text-text-muted uppercase tracking-wide">
-                      Rol
+                      Role
                     </th>
                     <th className="text-left px-5 py-3 text-[11px] font-semibold text-text-muted uppercase tracking-wide">
-                      Kayıt Tarihi
+                      Registered
                     </th>
                   </tr>
                 </thead>
@@ -295,7 +295,7 @@ export default function AdminUsersPage() {
                         </span>
                       </td>
                       <td className="px-5 py-3 text-text-muted">
-                        {new Date(u.created_at).toLocaleDateString('tr-TR')}
+                        {new Date(u.created_at).toLocaleDateString('en-US')}
                       </td>
                     </tr>
                   ))}

@@ -13,7 +13,7 @@ export function FilterPanel({ filters, counts, total, onToggle, onShowAll, onSho
   return (
     <div>
       <p className="text-[11px] text-[#6b6864] mb-3.5 leading-relaxed">
-        Harita üzerinde görmek istediğiniz hasar sınıflarını seçin.
+        Select the damage classes you want to see on the map.
       </p>
       {DAMAGE_CLASSES.map((d) => (
         <div
@@ -43,16 +43,16 @@ export function FilterPanel({ filters, counts, total, onToggle, onShowAll, onSho
           </div>
           <div className="flex-1">
             <div className="text-[12px] font-medium" style={{ color: filters[d.id] ? d.color : '#444' }}>{d.label}</div>
-            <div className="text-[10px] text-text-faint">{counts[d.id] ?? 0} bina · %{total > 0 ? Math.round((counts[d.id] ?? 0) / total * 100) : 0}</div>
+            <div className="text-[10px] text-text-faint">{counts[d.id] ?? 0} buildings · {total > 0 ? Math.round((counts[d.id] ?? 0) / total * 100) : 0}%</div>
           </div>
           <div className="w-2.5 h-2.5 rounded-[2px] shrink-0" style={{ background: d.color }} />
         </div>
       ))}
       <button onClick={onShowAll} className="w-full mt-1 py-2.5 rounded-lg border border-[#d1cfc8] bg-white text-[12px] text-[#444] hover:bg-[#faf9f7] transition-colors">
-        Tümünü Göster
+        Show All
       </button>
       <button onClick={onShowCritical} className="w-full mt-1.5 py-2.5 rounded-lg border border-accent bg-accent-light text-[12px] text-accent font-medium hover:bg-blue-100 transition-colors">
-        Sadece Kritik Hasarlılar
+        Critical Damage Only
       </button>
     </div>
   )

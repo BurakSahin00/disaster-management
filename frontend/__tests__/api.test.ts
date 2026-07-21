@@ -25,7 +25,7 @@ describe('apiGet', () => {
   })
 
   it('throws on non-ok response', async () => {
-    ;(fetch as jest.Mock).mockResolvedValueOnce({ ok: false, status: 404 })
+    ;(fetch as jest.Mock).mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({}) })
     await expect(apiGet('/jobs/missing')).rejects.toThrow('API error 404')
   })
 })

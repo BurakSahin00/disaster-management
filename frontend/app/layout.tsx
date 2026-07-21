@@ -18,13 +18,13 @@ const ibmPlexMono = IBM_Plex_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'DisasterSense — Afet Hasar Analizi',
-  description: 'ML destekli deprem sonrası bina hasar analizi',
+  title: 'DisasterSense — Disaster Damage Analysis',
+  description: 'ML-powered post-earthquake building damage assessment',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="tr" className={`${ibmPlexSans.variable} ${ibmPlexMono.variable}`}>
+    <html lang="en" className={`${ibmPlexSans.variable} ${ibmPlexMono.variable}`}>
       <body className="font-sans bg-surface text-text-primary antialiased h-full">
         <AuthGuard>{children}</AuthGuard>
       </body>

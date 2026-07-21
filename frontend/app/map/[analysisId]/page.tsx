@@ -13,9 +13,10 @@ import { FilterPanel } from '@/components/dashboard/FilterPanel'
 import { Tag } from '@/components/shared/Tag'
 import { DAMAGE_CLASSES } from '@/types'
 import { useAnalysisStore } from '@/store/useAnalysisStore'
-import { apiGet } from '@/lib/api'
+import { apiGet, apiPost } from '@/lib/api'
 import { generateDamageReport } from '@/lib/generateReport'
-import type { BuildingsGeoJson, GeoJsonBuilding, RegionsGeoJson, ClustersGeoJson } from '@/types'
+import { buildingCentroid } from '@/components/map/geojsonToLeaflet'
+import type { BuildingsGeoJson, GeoJsonBuilding, RegionsGeoJson, ClustersGeoJson, HotspotGeoJson } from '@/types'
 
 const LeafletMap = dynamic(() => import('@/components/map/LeafletMap'), { ssr: false })
 
@@ -24,8 +25,8 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 const LAYER_META = [
   {
     id: 'buildings' as const,
-    label: 'Binalar',
-    desc: 'Bireysel bina hasar poligonları',
+    label: 'Buildings',
+    desc: 'Individual building damage polygons',
     color: '#2563EB',
     icon: (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -36,8 +37,8 @@ const LAYER_META = [
   },
   {
     id: 'regions' as const,
-    label: 'Bölge Analizi',
-    desc: 'Ort. hasar şiddetine göre ızgara hücreleri',
+    label: 'Region Analysis',
+    desc: 'Grid cells by avg. damage intensity',
     color: '#ea580c',
     icon: (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -50,13 +51,38 @@ const LAYER_META = [
   },
   {
     id: 'clusters' as const,
-    label: 'Hasar Kümeleri',
-    desc: 'DBSCAN ile tespit edilen etki bölgeleri',
+    label: 'Damage Clusters',
+    desc: 'Impact zones detected via DBSCAN',
     color: '#7c3aed',
     icon: (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
         <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 2"/>
         <circle cx="7" cy="7" r="2" fill="currentColor" opacity="0.4"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'heatmap' as const,
+    label: 'Heat Map',
+    desc: 'Damage intensity distribution',
+    color: '#dc2626',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <circle cx="7" cy="7" r="5.5" fill="currentColor" opacity="0.15"/>
+        <circle cx="7" cy="7" r="3.5" fill="currentColor" opacity="0.35"/>
+        <circle cx="7" cy="7" r="1.5" fill="currentColor" opacity="0.8"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'hotspot' as const,
+    label: 'Hotspots',
+    desc: 'Getis-Ord G* statistical analysis',
+    color: '#dc2626',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.5"/>
+        <path d="M4.5 9.5C4.5 9.5 5 7 7 7C9 7 9.5 4.5 9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
       </svg>
     ),
   },
@@ -71,7 +97,10 @@ export default function MapPage() {
   const [clustersGeojson, setClustersGeojson] = useState<ClustersGeoJson | null>(null)
 
   const [filters, setFilters] = useState<Record<number, boolean>>({ 0: true, 1: true, 2: true, 3: true })
-  const [layerVisibility, setLayerVisibility] = useState({ buildings: true, regions: false, clusters: false })
+  const [layerVisibility, setLayerVisibility] = useState({ buildings: true, regions: false, clusters: false, heatmap: false, hotspot: false })
+  const [heatmapRadius, setHeatmapRadius] = useState(40)
+  const [hotspotGeojson, setHotspotGeojson] = useState<HotspotGeoJson | null>(null)
+  const [hotspotFetched, setHotspotFetched] = useState(false)
 
   const [selected, setSelected] = useState<GeoJsonBuilding | null>(null)
   const [tab, setTab] = useState<'summary' | 'filters' | 'layers'>('summary')
@@ -90,11 +119,11 @@ export default function MapPage() {
 
     apiGet<RegionsGeoJson>(`/analyses/${id}/regions.geojson`)
       .then(setRegionsGeojson)
-      .catch(() => {/* bölge verisi henüz oluşturulmamış olabilir */})
+      .catch(() => {/* region data may not be computed yet */})
 
     apiGet<ClustersGeoJson>(`/analyses/${id}/clusters.geojson`)
       .then(setClustersGeojson)
-      .catch(() => {/* küme verisi henüz oluşturulmamış olabilir */})
+      .catch(() => {/* cluster data may not be computed yet */})
 
     setTiffLoading(true)
     fetch(`${BASE}/analyses/${id}/pre-image`)
@@ -110,10 +139,33 @@ export default function MapPage() {
       .finally(() => setTiffLoading(false))
   }, [params.analysisId])
 
+  useEffect(() => {
+    if (!layerVisibility.hotspot || hotspotFetched) return
+    const id = params.analysisId
+    apiPost<{ status: string; cellCount: number }>(`/analyses/${id}/hotspot`, {})
+      .then(() => apiGet<HotspotGeoJson>(`/analyses/${id}/hotspot.geojson`))
+      .then((fc) => {
+        setHotspotGeojson(fc)
+        setHotspotFetched(true)
+      })
+      .catch(console.error)
+  }, [layerVisibility.hotspot, params.analysisId])
+
   const counts = useMemo(() => {
     const c: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0 }
     geojson?.features.forEach((f) => { c[f.properties.damage_class ?? 0] = (c[f.properties.damage_class ?? 0] ?? 0) + 1 })
     return c
+  }, [geojson])
+
+  // Intentionally ignores `filters`: the heatmap shows overall damage density for all buildings.
+  // The polygon layer (PolygonLayer) respects filters for focused inspection.
+  const heatmapPoints = useMemo<[number, number, number][]>(() => {
+    if (!geojson) return []
+    return geojson.features.flatMap((f) => {
+      const center = buildingCentroid(f.geometry)
+      if (!center) return []
+      return [[center[0], center[1], f.properties.damage_class ?? 0]] as [number, number, number][]
+    })
   }, [geojson])
 
   const total = geojson?.features.length ?? 0
@@ -127,7 +179,7 @@ export default function MapPage() {
   const handleDownloadPdf = () => {
     generateDamageReport({
       analysisId: params.analysisId,
-      projectName: projectName || 'Isimsiz Proje',
+      projectName: projectName || 'Unnamed Project',
       counts,
       total,
       regionCount,
@@ -149,7 +201,7 @@ export default function MapPage() {
         center={
           <div className="flex items-center gap-1.5">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#a8a49f" strokeWidth="1.8"><polyline points="1 4 8 10 15 4"/></svg>
-            <span className="text-[13px] text-[#6b6864]">{projectName || 'Analiz'}</span>
+            <span className="text-[13px] text-[#6b6864]">{projectName || 'Analysis'}</span>
           </div>
         }
         right={
@@ -159,11 +211,11 @@ export default function MapPage() {
                 href={`/projects/${projectId}`}
                 className="text-[12px] font-medium text-accent hover:underline mr-1"
               >
-                Proje
+                Project
               </Link>
             )}
-            <Tag {...DAMAGE_CLASSES[0]} label={`${counts[0]} Hasarsız`} />
-            <Tag {...DAMAGE_CLASSES[3]} label={`${counts[3]} Yıkık`} />
+            <Tag {...DAMAGE_CLASSES[0]} label={`${counts[0]} No Damage`} />
+            <Tag {...DAMAGE_CLASSES[3]} label={`${counts[3]} Destroyed`} />
             <div className="w-px h-[22px] bg-border" />
             <a
               href={geoJsonDownloadUrl}
@@ -171,7 +223,7 @@ export default function MapPage() {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-accent bg-accent-light text-accent text-[12px] font-medium hover:bg-blue-100 transition-colors"
             >
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z"/><path d="M5 8h6M8 5v6"/></svg>
-              GeoJSON İndir
+              Download GeoJSON
             </a>
             <button
               onClick={handleDownloadPdf}
@@ -197,6 +249,9 @@ export default function MapPage() {
           regionsGeojson={regionsGeojson}
           clustersGeojson={clustersGeojson}
           layerVisibility={layerVisibility}
+          heatmapPoints={heatmapPoints}
+          heatmapRadius={heatmapRadius}
+          hotspotGeojson={hotspotGeojson}
           tiffOverlay={
             tiffMeta
               ? {
@@ -210,7 +265,7 @@ export default function MapPage() {
         />
         {error && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1001] bg-white rounded-xl border border-red-200 shadow-lg px-5 py-3 text-center">
-            <div className="text-[13px] font-semibold text-red-700">GeoJSON yüklenemedi</div>
+            <div className="text-[13px] font-semibold text-red-700">Failed to load GeoJSON</div>
             <div className="text-[11px] text-red-500 mt-0.5">{error}</div>
           </div>
         )}
@@ -240,7 +295,7 @@ export default function MapPage() {
                   borderBottomColor: tab === id ? '#2563EB' : 'transparent',
                 }}
               >
-                {id === 'summary' ? 'Özet' : id === 'filters' ? 'Filtrele' : 'Katmanlar'}
+                {id === 'summary' ? 'Summary' : id === 'filters' ? 'Filters' : 'Layers'}
               </button>
             ))}
           </div>
@@ -249,22 +304,22 @@ export default function MapPage() {
             {tab === 'summary' && (
               <>
                 <div className="flex gap-2 mb-3.5">
-                  <StatCard label="Toplam Bina" value={total} sub="Tespit edilen" />
-                  <StatCard label="Etkilenen" value={`%${total > 0 ? Math.round(damaged / total * 100) : 0}`} sub={`${damaged} bina`} color="#ea580c" />
+                  <StatCard label="Total Buildings" value={total} sub="Detected" />
+                  <StatCard label="Affected" value={`${total > 0 ? Math.round(damaged / total * 100) : 0}%`} sub={`${damaged} buildings`} color="#ea580c" />
                 </div>
                 <div className="flex gap-2 mb-5">
-                  <StatCard label="Güvenli" value={safe} sub="Hasarsız+Az" color="#16a34a" />
-                  <StatCard label="Yıkık" value={counts[3] ?? 0} sub={`%${total > 0 ? Math.round((counts[3] ?? 0) / total * 100) : 0}`} color="#dc2626" />
+                  <StatCard label="Safe" value={safe} sub="No Dmg+Minor" color="#16a34a" />
+                  <StatCard label="Destroyed" value={counts[3] ?? 0} sub={`${total > 0 ? Math.round((counts[3] ?? 0) / total * 100) : 0}%`} color="#dc2626" />
                 </div>
                 <DamageChart counts={counts} total={total} />
                 <div className="mt-4 bg-[#faf9f7] rounded-lg p-3 border border-border">
-                  <div className="text-[11px] font-semibold text-[#6b6864] mb-1.5 uppercase tracking-[0.4px]">Analiz Detayları</div>
+                  <div className="text-[11px] font-semibold text-[#6b6864] mb-1.5 uppercase tracking-[0.4px]">Analysis Details</div>
                   {[
-                    ['Analiz ID', params.analysisId.slice(0, 8) + '…'],
-                    ['Koordinat', 'EPSG:4326'],
-                    ['Model', 'SegFormer + 4-sınıf'],
-                    ['Bölge sayısı', regionCount > 0 ? String(regionCount) : '—'],
-                    ['Küme sayısı', clusterCount > 0 ? String(clusterCount) : '—'],
+                    ['Analysis ID', params.analysisId.slice(0, 8) + '…'],
+                    ['Coordinate', 'EPSG:4326'],
+                    ['Model', 'SegFormer + 4-class'],
+                    ['Regions', regionCount > 0 ? String(regionCount) : '—'],
+                    ['Clusters', clusterCount > 0 ? String(clusterCount) : '—'],
                   ].map(([k, v]) => (
                     <div key={k} className="flex justify-between py-0.5 border-b border-[#f0ede8]">
                       <span className="text-[11px] text-text-muted">{k}</span>
@@ -289,7 +344,7 @@ export default function MapPage() {
             {tab === 'layers' && (
               <div>
                 <p className="text-[11px] text-[#6b6864] mb-3.5 leading-relaxed">
-                  Harita üzerinde gösterilecek katmanları seçin.
+                  Select layers to display on the map.
                 </p>
                 {LAYER_META.map((layer) => {
                   const on = layerVisibility[layer.id]
@@ -297,6 +352,10 @@ export default function MapPage() {
                     ? regionCount === 0
                     : layer.id === 'clusters'
                     ? clusterCount === 0
+                    : layer.id === 'heatmap'
+                    ? (geojson?.features.length ?? 0) === 0
+                    : layer.id === 'hotspot'
+                    ? regionCount === 0
                     : false
                   return (
                     <div
@@ -336,26 +395,43 @@ export default function MapPage() {
                         </div>
                         <div className="text-[10px] text-text-faint mt-0.5">{layer.desc}</div>
                         {unavailable && (
-                          <div className="text-[10px] text-[#ea580c] mt-0.5">Veri henüz hesaplanmadı</div>
+                          <div className="text-[10px] text-[#ea580c] mt-0.5">Data not yet computed</div>
                         )}
                         {!unavailable && layer.id === 'regions' && (
-                          <div className="text-[10px] text-text-faint mt-0.5">{regionCount} hücre</div>
+                          <div className="text-[10px] text-text-faint mt-0.5">{regionCount} cells</div>
                         )}
                         {!unavailable && layer.id === 'clusters' && (
-                          <div className="text-[10px] text-text-faint mt-0.5">{clusterCount} küme</div>
+                          <div className="text-[10px] text-text-faint mt-0.5">{clusterCount} clusters</div>
                         )}
                       </div>
                     </div>
                   )
                 })}
 
+                {layerVisibility.heatmap && (
+                  <div className="mt-2 p-3 rounded-lg bg-[#faf9f7] border border-border">
+                    <div className="text-[11px] font-semibold text-[#6b6864] mb-2 uppercase tracking-[0.4px]">
+                      Spread radius
+                    </div>
+                    <input
+                      type="range"
+                      min={20}
+                      max={80}
+                      value={heatmapRadius}
+                      onChange={(e) => setHeatmapRadius(Number(e.target.value))}
+                      className="w-full accent-[#dc2626]"
+                    />
+                    <div className="text-[10px] text-right text-text-faint mt-1">{heatmapRadius} px</div>
+                  </div>
+                )}
+
                 <div className="mt-4 rounded-lg bg-[#faf9f7] border border-border p-3">
-                  <div className="text-[10px] font-semibold text-[#6b6864] uppercase tracking-[0.4px] mb-2">Bölge Renk Skalası</div>
+                  <div className="text-[10px] font-semibold text-[#6b6864] uppercase tracking-[0.4px] mb-2">Region Color Scale</div>
                   {[
-                    { range: '0.0 – 0.5', label: 'Hasarsız bölge', color: '#16a34a' },
-                    { range: '0.5 – 1.5', label: 'Az hasarlı bölge', color: '#65a30d' },
-                    { range: '1.5 – 2.5', label: 'Ağır hasarlı bölge', color: '#ea580c' },
-                    { range: '2.5 – 3.0', label: 'Yıkık bölge', color: '#dc2626' },
+                    { range: '0.0 – 0.5', label: 'No-damage zone', color: '#16a34a' },
+                    { range: '0.5 – 1.5', label: 'Minor-damage zone', color: '#65a30d' },
+                    { range: '1.5 – 2.5', label: 'Major-damage zone', color: '#ea580c' },
+                    { range: '2.5 – 3.0', label: 'Destroyed zone', color: '#dc2626' },
                   ].map(({ range, label, color }) => (
                     <div key={range} className="flex items-center gap-2 py-0.5">
                       <div className="w-3 h-3 rounded-[2px] shrink-0" style={{ background: color }} />
@@ -365,7 +441,7 @@ export default function MapPage() {
                   ))}
                   <div className="mt-2 pt-2 border-t border-[#f0ede8] flex items-center gap-2">
                     <div className="w-3 h-3 rounded-[2px] shrink-0 border-2 border-dashed border-[#7c3aed]" style={{ background: '#7c3aed22' }} />
-                    <span className="text-[10px] text-text-muted">Hasar kümesi sınırı</span>
+                    <span className="text-[10px] text-text-muted">Damage cluster boundary</span>
                   </div>
                 </div>
               </div>

@@ -9,12 +9,12 @@ import { useJobSocket } from '@/lib/useJobSocket'
 import { useAnalysisStore } from '@/store/useAnalysisStore'
 
 const STEPS = [
-  { label: 'TIFF Dosyaları Yükleniyor',  sub: 'Pre/post görüntüler belleğe okunuyor'           },
-  { label: 'Projeksiyon Eşleştirme',      sub: 'CRS dönüşümü, piksel hizalama'                  },
-  { label: 'Bina Segmentasyonu',          sub: 'SegFormer modeli ile bina sınırları tespit ediliyor' },
-  { label: 'Değişim Analizi',             sub: 'Polygon çıkarımı hesaplanıyor'                   },
-  { label: 'Hasar Sınıflandırma',         sub: '4-sınıf hasar modeli çalışıyor'                  },
-  { label: 'GeoJSON Dışa Aktarma',        sub: 'Poligon veritabanı ve istatistik raporu'         },
+  { label: 'Loading TIFF Files',       sub: 'Reading pre/post images into memory'              },
+  { label: 'Projection Matching',      sub: 'CRS reprojection, pixel alignment'                },
+  { label: 'Building Segmentation',    sub: 'Detecting building footprints with SegFormer'     },
+  { label: 'Change Analysis',          sub: 'Computing polygon extraction'                     },
+  { label: 'Damage Classification',    sub: 'Running 4-class damage model'                     },
+  { label: 'GeoJSON Export',           sub: 'Polygon database and statistics report'           },
 ]
 
 // Pipeline stdout markers → step index
@@ -109,7 +109,7 @@ export default function ProgressPage() {
               href={`/projects/${projectId}`}
               className="text-[12px] font-medium text-accent hover:underline"
             >
-              Proje analizleri
+              Project analyses
             </Link>
           ) : undefined
         }
@@ -118,13 +118,13 @@ export default function ProgressPage() {
         <div className="w-full max-w-[700px] animate-fade-up">
           {failed ? (
             <div className="bg-white rounded-2xl border border-red-200 p-8 text-center">
-              <div className="text-[15px] font-semibold text-red-700 mb-2">Pipeline Başarısız</div>
+              <div className="text-[15px] font-semibold text-red-700 mb-2">Pipeline Failed</div>
               <div className="text-[13px] text-red-500 mb-6">{failed}</div>
               <button
                 onClick={() => router.push('/')}
                 className="px-6 py-3 rounded-xl bg-accent text-white text-[14px] font-semibold"
               >
-                ← Geri Dön
+                ← Go Back
               </button>
             </div>
           ) : (
@@ -137,7 +137,7 @@ export default function ProgressPage() {
                     onClick={() => router.push(`/map/${completedAnalysisId.current}`)}
                     className="w-full py-3.5 rounded-xl bg-accent text-white text-[15px] font-semibold shadow-[0_4px_14px_rgba(37,99,235,0.27)] hover:-translate-y-px transition-all"
                   >
-                    Harita ve Dashboard&apos;a Git  →
+                    Go to Map &amp; Dashboard  →
                   </button>
                 </div>
               )}

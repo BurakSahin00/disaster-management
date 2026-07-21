@@ -13,7 +13,7 @@ export function ProgressCard({ steps, activeIndex, progress, done }: ProgressCar
       <div className="px-7 py-6 border-b border-border">
         <div className="flex justify-between items-center mb-3">
           <div className="font-semibold text-[15px]">
-            {done ? '✓  Analiz Tamamlandı' : 'Analiz İlerliyor…'}
+            {done ? '✓  Analysis Complete' : 'Analysis in Progress…'}
           </div>
           <span className="font-mono text-[13px] text-accent font-medium">{progress}%</span>
         </div>

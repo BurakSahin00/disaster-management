@@ -15,7 +15,7 @@ export function LogTerminal({ lines, done }: LogTerminalProps) {
         {['#ff5f57', '#febc2e', '#28c840'].map((c) => (
           <div key={c} className="w-2.5 h-2.5 rounded-full" style={{ background: c }} />
         ))}
-        <span className="ml-2 text-[11px] text-[#6b6864] font-mono">analiz.log</span>
+        <span className="ml-2 text-[11px] text-[#6b6864] font-mono">analysis.log</span>
       </div>
       <div className="px-4 py-3 h-[138px] overflow-y-auto flex flex-col gap-0.5">
         {lines.map((l, i) => (

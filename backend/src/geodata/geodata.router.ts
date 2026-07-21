@@ -12,6 +12,7 @@ import {
 import { requireApiKey } from '../middleware/apiKey';
 import { parseBody } from '../validation/zod';
 import { zRecompute } from '../validation/schemas';
+import { computeHotspot, getHotspotGeoJSON } from './hotspot.service';
 
 export const geodataRouter = Router();
 
@@ -136,6 +137,56 @@ geodataRouter.get(
       res.setHeader('Cache-Control', 'public, max-age=86400');
       res.sendFile(pngPath);
     } catch (err) {
+      next(err);
+    }
+  },
+);
+
+geodataRouter.post(
+  '/analyses/:analysisId/hotspot',
+  requireApiKey,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const analysisId = req.params['analysisId'] as string;
+      const result = await computeHotspot(analysisId);
+      res.json({ status: 'ok', cellCount: result.cellCount });
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        'status' in err &&
+        (err as { status: number }).status === 404
+      ) {
+        res.status(404).json({ error: err.message });
+        return;
+      }
+      next(err);
+    }
+  },
+);
+
+geodataRouter.get(
+  '/analyses/:analysisId/hotspot.geojson',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const analysisId = req.params['analysisId'] as string;
+      const bbox =
+        typeof req.query['bbox'] === 'string' ? (req.query['bbox'] as string) : undefined;
+      const bbox4326 = bbox ? bbox.split(',').map(Number) : undefined;
+      const parsed =
+        bbox4326 && bbox4326.length === 4 && bbox4326.every((n) => Number.isFinite(n))
+          ? (bbox4326 as [number, number, number, number])
+          : undefined;
+      const fc = await getHotspotGeoJSON(analysisId, parsed);
+      res.json(fc);
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        'status' in err &&
+        (err as { status: number }).status === 404
+      ) {
+        res.status(404).json({ error: err.message });
+        return;
+      }
       next(err);
     }
   },

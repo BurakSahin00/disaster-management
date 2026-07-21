@@ -43,7 +43,7 @@ export function TiffOverlayControl({
             <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M3.5 12.5l1.4-1.4M11.1 4.9l1.4-1.4"/>
           </svg>
           <span style={{ fontSize: 12, fontWeight: 600, color: '#3a3835' }}>
-            Uydu Görüntüsü
+            Satellite Image
           </span>
         </div>
 
@@ -61,7 +61,7 @@ export function TiffOverlayControl({
               transition: 'background 0.2s',
               flexShrink: 0,
             }}
-            aria-label={visible ? 'Uydu görüntüsünü gizle' : 'Uydu görüntüsünü göster'}
+            aria-label={visible ? 'Hide satellite image' : 'Show satellite image'}
           >
             <span
               style={{
@@ -87,27 +87,27 @@ export function TiffOverlayControl({
               <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/>
             </path>
           </svg>
-          <span>Görüntü hazırlanıyor…</span>
+          <span>Preparing image…</span>
         </div>
       )}
 
       {!loading && error && (
         <div style={{ marginTop: 8, fontSize: 11, color: '#dc2626' }}>
-          Görüntü yüklenemedi
+          Image could not be loaded
         </div>
       )}
 
       {!loading && !error && !available && (
         <div style={{ marginTop: 6, fontSize: 11, color: '#8b8880' }}>
-          Henüz mevcut değil
+          Not yet available
         </div>
       )}
 
       {!loading && !error && available && visible && (
         <div style={{ marginTop: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontSize: 11, color: '#8b8880' }}>Şeffaflık</span>
-            <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#3a3835' }}>%{opacity}</span>
+            <span style={{ fontSize: 11, color: '#8b8880' }}>Opacity</span>
+            <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#3a3835' }}>{opacity}%</span>
           </div>
           <input
             type="range"

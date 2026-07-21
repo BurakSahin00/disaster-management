@@ -40,7 +40,7 @@ export function StepList({ steps, activeIndex }: StepListProps) {
               <div className="text-[11px] text-text-faint mt-0.5">{s.sub}</div>
             </div>
             {status === 'done' && <span className="text-[11px] text-[#16a34a] font-mono">✓</span>}
-            {status === 'active' && <span className="text-[10px] text-accent font-mono animate-pulse-dot">çalışıyor…</span>}
+            {status === 'active' && <span className="text-[10px] text-accent font-mono animate-pulse-dot">running…</span>}
           </div>
         )
       })}

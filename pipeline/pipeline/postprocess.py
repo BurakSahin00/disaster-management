@@ -234,6 +234,7 @@ def damage_geojson_and_bbox4326(
     transform,
     src_crs,
     dst_crs: str = "EPSG:4326",
+    classified: Optional[List[bool]] = None,
 ) -> Tuple[dict, Optional[dict]]:
     """
     Segmentasyon polygon sırası ile aynı indeks: hasar + confidence + PostGIS ingest GeoJSON.
@@ -268,18 +269,15 @@ def damage_geojson_and_bbox4326(
         gj = mapping(geom)
         if gj.get("coordinates") is None:
             continue
-        features.append(
-            {
-                "type": "Feature",
-                "geometry": gj,
-                "properties": {
-                    "id": i,
-                    "damage_class": int(dc),
-                    "confidence": float(cf),
-                    "bbox_px": [float(x) for x in polygons[i].bounds],
-                },
-            }
-        )
+        props = {
+            "id": i,
+            "damage_class": int(dc),
+            "confidence": None if cf is None else float(cf),
+            "bbox_px": [float(x) for x in polygons[i].bounds],
+        }
+        if classified is not None:
+            props["classified"] = bool(classified[i])
+        features.append({"type": "Feature", "geometry": gj, "properties": props})
 
     bbox4326: Optional[dict] = None
     if src_crs is not None and geoms:

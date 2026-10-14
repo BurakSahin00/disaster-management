@@ -1,3 +1,4 @@
+import time
 import numpy as np
 from pathlib import Path
 from typing import Optional
@@ -15,6 +16,7 @@ from .postprocess import (
     write_change_map_sidecar,
     write_damage_geotiff,
 )
+from . import paper_inference as paper
 
 
 class DamageAnalysisPipeline:
@@ -27,14 +29,33 @@ class DamageAnalysisPipeline:
         min_building_area: int = 50,
         crop_size: tuple = (224, 224),
         device: Optional[str] = None,
+        mode: str = "paper",
+        paper_cfg: Optional[dict] = None,
     ):
+        # mode="paper": the pipeline evaluated in the paper (see paper_inference.py).
+        # mode="legacy": the earlier platform pipeline (contours, single-pass models).
+        self.mode = mode
         self.loader = TiffLoader(tile_size=tile_size, overlap=overlap)
         self.seg_model = SegmentationModel(seg_model_path, device=device)
-        self.dmg_model = DamageClassifier(dmg_model_path, device=device)
         self.min_building_area = min_building_area
         self.crop_size = crop_size
+        self.cfg = dict(paper.PAPER_DEFAULTS)
+        if paper_cfg:
+            self.cfg.update({k: v for k, v in paper_cfg.items() if v is not None})
+        if mode == "paper":
+            if not self.seg_model._is_segformer:
+                raise ValueError("mode='paper' requires the SegFormer model directory as --seg-model.")
+            self.dmg_model = paper.TwoHeadDamageClassifier(dmg_model_path, device=device)
+            print(f"[paper] TwoHead classifier: {self.dmg_model.backbone}, DiffAttention={self.dmg_model.has_diff_attn}, "
+                  f"device={self.dmg_model.device}; settings={self.cfg}")
+        elif mode == "legacy":
+            self.dmg_model = DamageClassifier(dmg_model_path, device=device)
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
 
     def run(self, pre_path: str, post_path: str, output_dir: str = "outputs") -> dict:
+        if self.mode == "paper":
+            return self._run_paper(pre_path, post_path, output_dir)
         output_dir = Path(output_dir)
         output_dir.mkdir(exist_ok=True)
 
@@ -94,6 +115,80 @@ class DamageAnalysisPipeline:
         print(f"\nSonuç: {summary}")
         return summary
 
+
+    # ------------------------------------------------------------------ paper mode
+    def _sync(self):
+        import torch
+        if str(self.seg_model.device).startswith("cuda"):
+            torch.cuda.synchronize()
+
+    def _run_paper(self, pre_path: str, post_path: str, output_dir: str = "outputs") -> dict:
+        cfg = self.cfg
+        output_dir = Path(output_dir)
+        output_dir.mkdir(exist_ok=True)
+        timing = {}
+        t_all = time.perf_counter()
+        meta = self.loader.load_metadata(pre_path)
+        h, w = meta["height"], meta["width"]
+
+        t = time.perf_counter()
+        pre = paper.read_rgb_float(pre_path)
+        post = paper.read_rgb_float(post_path)
+        pre_pct, pre_mm, post_mm = paper.percentile_uint8(pre), paper.minmax_uint8(pre), paper.minmax_uint8(post)
+        timing["read_s"] = time.perf_counter() - t
+
+        print(f"[1/3] Segmentasyon (SegFormer, pencere {cfg['tile']}/{cfg['stride']}, TTA={cfg['seg_tta']}) ... ({h}x{w} px)")
+        self._sync(); t = time.perf_counter()
+        prob = paper.segformer_probability(self.seg_model._processor, self.seg_model._hf_model, pre_pct,
+                                           self.seg_model.device, cfg)
+        self._sync(); timing["seg_s"] = time.perf_counter() - t
+        binary_mask = (prob >= cfg["seg_threshold"]).astype(np.uint8)
+
+        print("[2/3] Bina örnekleri (bağlı bileşenler) çıkarılıyor...")
+        t = time.perf_counter()
+        labeled, n_comp, boxes, ids, small = paper.extract_components(binary_mask, cfg)
+        polys_by_id = paper.component_polygons(labeled, cfg["connectivity"])
+        timing["extract_s"] = time.perf_counter() - t
+        print(f"    {n_comp} bileşen: {len(ids)} sınıflandırılacak, {len(small)} küçük (< {cfg['min_component_px']} px → no-damage)")
+
+        print(f"[3/3] Hasar sınıflandırması ({cfg['cls_views']} görünüm TTA)...")
+        classes, confs, crop_s, cls_s = paper.classify_components(self.dmg_model, pre_mm, post_mm, boxes, cfg)
+        timing["crop_s"], timing["cls_s"] = crop_s, cls_s
+
+        # Component order: classified components first, then small ones (label 0, not classified)
+        polygons, damage_labels, confidences, classified = [], [], [], []
+        for cid, c, cf in zip(ids, classes, confs):
+            if cid in polys_by_id:
+                polygons.append(polys_by_id[cid]); damage_labels.append(int(c)); confidences.append(float(cf)); classified.append(True)
+        for cid in small:
+            if cid in polys_by_id:
+                polygons.append(polys_by_id[cid]); damage_labels.append(0); confidences.append(None); classified.append(False)
+
+        # Damage raster straight from the component labels (identical to the evaluated pixel maps; 255 = background)
+        lut = np.full(n_comp + 1, 255, dtype=np.uint8)
+        lut[np.asarray(ids, dtype=np.int64)] = np.asarray(classes, dtype=np.uint8)
+        lut[np.asarray(small, dtype=np.int64)] = 0
+        damage_raster = lut[labeled]
+
+        t = time.perf_counter()
+        self._save_outputs(post_mm, polygons, damage_labels, confidences, binary_mask, output_dir, meta, pre_path,
+                           classified=classified, damage_raster=damage_raster)
+        timing["outputs_s"] = time.perf_counter() - t
+        timing["total_s"] = time.perf_counter() - t_all
+        timing.update({"n_components": int(n_comp), "n_classified": int(len(ids)), "n_small": int(len(small)),
+                       "height": int(h), "width": int(w), "device": str(self.seg_model.device), "settings": cfg})
+        import json
+        rp = output_dir / "report.json"
+        report = json.loads(rp.read_text())
+        report["timing"] = timing
+        report["mode"] = "paper"
+        rp.write_text(json.dumps(report, indent=2))
+        (output_dir / "timing.json").write_text(json.dumps(timing, indent=2))
+        summary = self._summarize(damage_labels)
+        print("    süreler (s): " + ", ".join(f"{k}={v:.2f}" for k, v in timing.items() if k.endswith("_s")))
+        print(f"\nSonuç: {summary}")
+        return summary
+
     def _save_outputs(
         self,
         post_img_hwc,
@@ -104,6 +199,8 @@ class DamageAnalysisPipeline:
         output_dir,
         meta,
         pre_path: str,
+        classified=None,
+        damage_raster=None,
     ):
         import cv2, json
 
@@ -140,12 +237,13 @@ class DamageAnalysisPipeline:
                 confidences,
                 meta.get("transform"),
                 meta.get("crs"),
+                classified=classified,
             )
             with open(output_dir / "buildings.geojson", "w") as f:
                 json.dump(geojson, f)
 
             h, w = int(meta["height"]), int(meta["width"])
-            dam = rasterize_damage_labels(polygons, damage_labels, h, w)
+            dam = damage_raster if damage_raster is not None else rasterize_damage_labels(polygons, damage_labels, h, w)
             dm_path = output_dir / "damage_map.tif"
             write_damage_geotiff(str(dm_path), dam, pre_path)
             crs = meta.get("crs")

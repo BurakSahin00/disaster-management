@@ -116,6 +116,7 @@ def main() -> int:
         tile_size=512,
         overlap=64,
         device="cpu",
+        mode="legacy",  # dummy .pth models; paper mode needs a SegFormer directory + TwoHead checkpoint
     )
     summary = pipe.run(str(pre_tif), str(post_tif), str(outputs_dir))
 

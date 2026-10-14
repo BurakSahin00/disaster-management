@@ -12,6 +12,12 @@ def main():
     parser.add_argument("--tile-size", type=int, default=512)
     parser.add_argument("--overlap", type=int, default=64)
     parser.add_argument("--device", default=None, help="cuda veya cpu")
+    parser.add_argument("--mode", default="paper", choices=["paper", "legacy"],
+                        help="paper: makalede değerlendirilen boru hattı (varsayılan); legacy: eski platform hattı")
+    parser.add_argument("--stride", type=int, default=None, help="[paper] SegFormer pencere adımı (varsayılan 256)")
+    parser.add_argument("--no-seg-tta", action="store_true", help="[paper] SegFormer 4-flip TTA'yı kapat")
+    parser.add_argument("--cls-views", type=int, default=None, help="[paper] sınıflandırıcı TTA görünüm sayısı (varsayılan 6)")
+    parser.add_argument("--min-component-px", type=int, default=None, help="[paper] sınıflandırılmayacak küçük bileşen eşiği (varsayılan 10)")
     args = parser.parse_args()
 
     pipeline = DamageAnalysisPipeline(
@@ -20,6 +26,13 @@ def main():
         tile_size=args.tile_size,
         overlap=args.overlap,
         device=args.device,
+        mode=args.mode,
+        paper_cfg={
+            "stride": args.stride,
+            "seg_tta": False if args.no_seg_tta else None,
+            "cls_views": args.cls_views,
+            "min_component_px": args.min_component_px,
+        },
     )
     pipeline.run(args.pre, args.post, args.output)
 

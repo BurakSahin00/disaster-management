@@ -84,8 +84,20 @@ The backend spawns the pipeline as a child process per job. It can also be run
 standalone:
 
 ```powershell
-python main.py --pre pre.tif --post post.tif --seg-model models/segformer --dmg-model models/damage.pth --output outputs/
+python main.py --pre pre.tif --post post.tif --seg-model models/segformer_best --dmg-model models/final.pt --output outputs/
 ```
+
+**Pipeline modes.** `--mode paper` (default) runs exactly the pipeline evaluated in the paper
+(`pipeline/pipeline/paper_inference.py`):
+
+| Stage | Setting |
+|---|---|
+| Segmentation | SegFormer (MiT-B4) on the pre-disaster image, global 2–98 percentile stretch, 512 px window / 256 px stride, 4-flip TTA, threshold 0.5 |
+| Building instances | 4-connected components; components < 10 px are not classified (no-damage); bbox + 48 px, 224 × 224 crops from min-max stretched images |
+| Damage | TwoHead Siamese ResNet-34 with DiffAttention (`final.pt` state_dict), 6-view embedding-level TTA, binary head → 0.5·CE + 0.5·CORN severity |
+
+`report.json` / `timing.json` contain per-stage run times. `--mode legacy` keeps the earlier platform
+pipeline (contour extraction, single-pass models).
 
 ### 4. Frontend
 
@@ -134,6 +146,24 @@ npm run test:integration  # integration tests against live PostGIS
 cd frontend
 npm test                  # Jest + jsdom component/unit tests
 ```
+
+## Benchmarks (paper, Reviewer 2 – M6)
+
+```powershell
+# ML pipeline run time per scene and per km² (paper mode), on this machine
+cd pipeline
+python tools/benchmark_pipeline.py --scenes-dir <xBD images dir> --seg-model <segformer_best> --dmg-model <final.pt> --n 10 --device cpu
+
+# PostGIS ingest, map queries, region grid + DBSCAN, Getis-Ord Gi* on 1k / 5k / 10k buildings
+cd backend
+set DATABASE_URL=postgresql://postgres:password@localhost:5432/damage
+npm run benchmark -- --sizes 1000,5000,10000 --repeats 5 --out benchmark_results.json
+```
+
+Region aggregation uses a 250 m square grid (EPSG:3857 units); DBSCAN impact zones run on damaged
+cell centroids with eps = 1.5 × grid size (edge- and corner-adjacent damaged cells merge) and
+minPoints = 1; Getis-Ord Gi* uses the mean damage class per cell, 8 nearest neighbours (row-standardised)
+and analytical z-scores (90/95/99 % at |z| ≥ 1.645/1.960/2.576).
 
 ## Damage Classes
 

@@ -124,13 +124,17 @@ export function createGeodataRepository(db: Pool) {
       clusterMinAvgDamageClass?: number;
       clusterMinCellCount?: number;
     }): Promise<{ regions: number; clusters: number }> {
-      const eps = input.epsMeters ?? 150;
-      const minPts = input.minPoints ?? 1;
+      const gridType = input.gridType ?? 'square';
       const grid = input.gridSizeMeters ?? 250;
+      // DBSCAN runs on grid-cell centroids (EPSG:3857 units). eps must exceed the centroid spacing,
+      // otherwise every damaged cell becomes its own cluster. Square grid: neighbours at 1x (edge) and
+      // 1.41x (corner) the cell size -> eps = 1.5x joins 8-connected damaged cells. Hex grid (size = edge
+      // length): neighbours at 1.73x -> eps = 1.8x. Previous fixed default (150) was below the spacing.
+      const eps = input.epsMeters ?? (gridType === 'hex' ? 1.8 : 1.5) * grid;
+      const minPts = input.minPoints ?? 1;
       // Cells with any damaged building (1–3) enter clustering; singleton-friendly defaults.
       const minAvg = input.clusterMinAvgDamageClass ?? 0.01;
       const minCells = input.clusterMinCellCount ?? 1;
-      const gridType = input.gridType ?? 'square';
 
       // Wipes derived tables for the analysis, then regenerates:
       // - region_damages: grid cells over ALL building centroids (incl. class 0)

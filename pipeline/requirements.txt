@@ -13,3 +13,4 @@ libpysal>=4.9
 esda>=2.6
 geopandas>=0.14
 psycopg2-binary>=2.9
+scipy>=1.10

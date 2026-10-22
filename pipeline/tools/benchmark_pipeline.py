@@ -43,6 +43,8 @@ def main() -> None:
     ap.add_argument("--device", default=None)
     ap.add_argument("--gsd", type=float, default=0.5, help="m/px when the GeoTIFF is not in a projected CRS (xBD ≈ 0.5)")
     ap.add_argument("--out", default="pipeline_benchmark.json")
+    ap.add_argument("--seg-batch", type=int, default=None, help="SegFormer window batch (default GPU 8, CPU 1)")
+    ap.add_argument("--cls-batch", type=int, default=None, help="classifier batch (default GPU 64, CPU 16)")
     args = ap.parse_args()
 
     pres = sorted(Path(args.scenes_dir).rglob("*_pre_disaster.tif"))
@@ -52,7 +54,8 @@ def main() -> None:
         sys.exit("Need at least 2 scene pairs (1 warm-up + 1 measured).")
 
     t = time.perf_counter()
-    pipe = DamageAnalysisPipeline(args.seg_model, args.dmg_model, device=args.device, mode="paper")
+    pipe = DamageAnalysisPipeline(args.seg_model, args.dmg_model, device=args.device, mode="paper",
+                                  paper_cfg={"seg_batch": args.seg_batch, "cls_batch": args.cls_batch})
     load_s = time.perf_counter() - t
 
     rows = []

@@ -42,6 +42,10 @@ class DamageAnalysisPipeline:
         self.cfg = dict(paper.PAPER_DEFAULTS)
         if paper_cfg:
             self.cfg.update({k: v for k, v in paper_cfg.items() if v is not None})
+        if not str(self.seg_model.device).startswith("cuda"):
+            for k, v in paper.CPU_BATCH.items():
+                if not (paper_cfg and paper_cfg.get(k) is not None):
+                    self.cfg[k] = v
         if mode == "paper":
             if not self.seg_model._is_segformer:
                 raise ValueError("mode='paper' requires the SegFormer model directory as --seg-model.")
@@ -57,7 +61,7 @@ class DamageAnalysisPipeline:
         if self.mode == "paper":
             return self._run_paper(pre_path, post_path, output_dir)
         output_dir = Path(output_dir)
-        output_dir.mkdir(exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
         meta = self.loader.load_metadata(pre_path)
         h, w = meta["height"], meta["width"]
@@ -125,7 +129,7 @@ class DamageAnalysisPipeline:
     def _run_paper(self, pre_path: str, post_path: str, output_dir: str = "outputs") -> dict:
         cfg = self.cfg
         output_dir = Path(output_dir)
-        output_dir.mkdir(exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
         timing = {}
         t_all = time.perf_counter()
         meta = self.loader.load_metadata(pre_path)

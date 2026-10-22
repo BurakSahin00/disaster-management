@@ -52,6 +52,10 @@ PAPER_DEFAULTS = dict(
     cls_batch=64,
 )
 
+# Batch sizes do not change the outputs (eval mode); they only set peak memory. On CPU, seg_batch=8 needs a
+# single 1.6 GB decoder tensor for MiT-B4, so smaller batches are used unless set explicitly.
+CPU_BATCH = dict(seg_batch=1, cls_batch=16)
+
 
 # --------------------------------------------------------------------------- image reading
 def read_rgb_float(path: str) -> np.ndarray:

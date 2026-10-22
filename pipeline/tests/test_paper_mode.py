@@ -72,6 +72,20 @@ class PaperModeTests(unittest.TestCase):
             vals = set(np.unique(d.read(1)).tolist())
         self.assertTrue(vals <= {0, 1, 2, 3, 255})
 
+    def test_cpu_batches_and_nested_output_dir(self):
+        pl = DamageAnalysisPipeline(str(self.tmp / "seg"), str(self.tmp / "final.pt"), device="cpu", mode="paper")
+        self.assertEqual((pl.cfg["seg_batch"], pl.cfg["cls_batch"]), (1, 16))
+        pl2 = DamageAnalysisPipeline(str(self.tmp / "seg"), str(self.tmp / "final.pt"), device="cpu", mode="paper",
+                                     paper_cfg={"seg_batch": 4})
+        self.assertEqual((pl2.cfg["seg_batch"], pl2.cfg["cls_batch"]), (4, 16))
+        img = paper.percentile_uint8(paper.read_rgb_float(str(self.tmp / "pre.tif")))
+        p1 = paper.segformer_probability(pl.seg_model._processor, pl.seg_model._hf_model, img, "cpu", pl.cfg)
+        p8 = paper.segformer_probability(pl.seg_model._processor, pl.seg_model._hf_model, img, "cpu", dict(pl.cfg, seg_batch=8))
+        self.assertLess(float(np.abs(p1 - p8).max()), 1e-5)   # batch size does not change the output
+        out = self.tmp / "a" / "b" / "out"
+        pl.run(str(self.tmp / "pre.tif"), str(self.tmp / "post.tif"), str(out))
+        self.assertTrue((out / "report.json").exists())
+
     def test_loads_checkpoint_without_diff_attn(self):
         torch.save(paper.TwoHeadSiamese("resnet34", use_diff_attn=False).state_dict(), self.tmp / "old.pt")
         clf = paper.TwoHeadDamageClassifier(str(self.tmp / "old.pt"), device="cpu")

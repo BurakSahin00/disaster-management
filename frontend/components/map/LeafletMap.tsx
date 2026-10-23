@@ -9,8 +9,19 @@ import { HeatmapLayer } from './HeatmapLayer'
 import { HotspotLayer } from './HotspotLayer'
 import type { HotspotGeoJson } from '@/types'
 
-// CARTO basemaps now require an API key (tiles show "API KEY REQUIRED"); OpenStreetMap needs none.
-const BASEMAP_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+// Basemap. CARTO Positron (the light map used in the paper figures) now needs a free API key
+// (https://carto.com/basemaps/apikey/): set NEXT_PUBLIC_CARTO_API_KEY in frontend/.env.local.
+// NEXT_PUBLIC_BASEMAP_URL overrides the tile template; without either, OpenStreetMap tiles are used.
+const OSM_ATTRIBUTION = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+const CARTO_KEY = process.env.NEXT_PUBLIC_CARTO_API_KEY
+const BASEMAP_URL =
+  process.env.NEXT_PUBLIC_BASEMAP_URL ||
+  (CARTO_KEY
+    ? `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`
+    : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png')
+const BASEMAP_ATTRIBUTION = BASEMAP_URL.includes('cartocdn')
+  ? `${OSM_ATTRIBUTION}, © <a href="https://carto.com/attributions">CARTO</a>`
+  : OSM_ATTRIBUTION
 
 function severityColor(severity: number): string {
   if (severity < 0.5) return '#16a34a'
@@ -265,7 +276,8 @@ export default function LeafletMap({
     >
       <TileLayer
         url={BASEMAP_URL}
-        attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        attribution={BASEMAP_ATTRIBUTION}
+        subdomains="abcd"
         maxZoom={19}
       />
       {tiffOverlay && (

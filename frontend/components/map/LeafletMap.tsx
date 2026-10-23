@@ -9,7 +9,8 @@ import { HeatmapLayer } from './HeatmapLayer'
 import { HotspotLayer } from './HotspotLayer'
 import type { HotspotGeoJson } from '@/types'
 
-const CARTO_POSITRON = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+// CARTO basemaps now require an API key (tiles show "API KEY REQUIRED"); OpenStreetMap needs none.
+const BASEMAP_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 
 function severityColor(severity: number): string {
   if (severity < 0.5) return '#16a34a'
@@ -263,9 +264,8 @@ export default function LeafletMap({
       style={{ width: '100%', height: '100%' }}
     >
       <TileLayer
-        url={CARTO_POSITRON}
-        attribution='© <a href="https://carto.com">CARTO</a>'
-        subdomains="abcd"
+        url={BASEMAP_URL}
+        attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         maxZoom={19}
       />
       {tiffOverlay && (

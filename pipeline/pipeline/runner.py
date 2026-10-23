@@ -153,7 +153,7 @@ class DamageAnalysisPipeline:
         labeled, n_comp, boxes, ids, small = paper.extract_components(binary_mask, cfg)
         polys_by_id = paper.component_polygons(labeled, cfg["connectivity"])
         timing["extract_s"] = time.perf_counter() - t
-        print(f"    {n_comp} bileşen: {len(ids)} sınıflandırılacak, {len(small)} küçük (< {cfg['min_component_px']} px → no-damage)")
+        print(f"    {n_comp} bileşen: {len(ids)} sınıflandırılacak, {len(small)} küçük (< {cfg['min_component_px']} px -> no-damage)")
 
         print(f"[3/3] Hasar sınıflandırması ({cfg['cls_views']} görünüm TTA)...")
         classes, confs, crop_s, cls_s = paper.classify_components(self.dmg_model, pre_mm, post_mm, boxes, cfg)

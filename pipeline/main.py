@@ -1,8 +1,16 @@
 import argparse
+import sys
 from pipeline import DamageAnalysisPipeline
 
 
 def main():
+    # The backend reads stdout through a pipe; on Windows that pipe uses the ANSI code page (e.g. cp1254),
+    # which cannot encode every character we print. Always write UTF-8.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     parser = argparse.ArgumentParser(description="Bina Hasar Analizi Pipeline")
     parser.add_argument("--pre", required=True, help="Afet öncesi TIFF yolu")
     parser.add_argument("--post", required=True, help="Afet sonrası TIFF yolu")

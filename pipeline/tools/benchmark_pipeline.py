@@ -10,6 +10,9 @@ Usage:
   python tools/benchmark_pipeline.py --scenes-dir path/to/images --seg-model path/to/segformer_best \
       --dmg-model path/to/final.pt --n 10 --device cpu --out pipeline_benchmark.json
 
+`--seg-model` is the SegFormer directory or the DualHeadUNet `best_model.pt`; the type is detected automatically
+and written to the output (env.seg_model).
+
 `--scenes-dir` must contain xBD-style pairs: <scene>_pre_disaster.tif and <scene>_post_disaster.tif.
 """
 import argparse
@@ -78,7 +81,8 @@ def main() -> None:
     summary["buildings_per_scene"] = statistics.mean(r["n_classified"] for r in rows)
     summary["cls_ms_per_building"] = 1000 * sum(r["cls_s"] for r in rows) / max(1, sum(r["n_classified"] for r in rows))
     env = {"cpu": platform.processor() or platform.machine(), "platform": platform.platform(), "python": platform.python_version(),
-           "device": rows[0].get("device") if rows else None, "model_load_s": load_s, "n_scenes": len(rows)}
+           "device": rows[0].get("device") if rows else None, "seg_model": pipe.seg_name, "model_load_s": load_s,
+           "n_scenes": len(rows)}
     try:
         import torch
         env["torch"] = torch.__version__

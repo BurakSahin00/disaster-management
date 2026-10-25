@@ -7,7 +7,7 @@ PostGIS-backed geospatial layers and downloadable reports.
 
 ## Features
 
-- **Two-stage ML pipeline** — SegFormer building segmentation followed by a 4-class
+- **Two-stage ML pipeline** — building segmentation (SegFormer or DualHeadUNet + ConvNeXt-Tiny) followed by a 4-class
   damage classifier (no damage / minor / major / destroyed) on paired pre/post crops
 - **Interactive damage map** (Leaflet) with toggleable layers:
   - Per-building damage polygons with filtering and popups
@@ -26,7 +26,7 @@ PostGIS-backed geospatial layers and downloadable reports.
 | Layer | Technology |
 |-------|-----------|
 | Backend | Node.js 20, TypeScript, Express 5 |
-| Pipeline | Python, PyTorch (SegFormer + CNN classifier), GeoPandas, PySAL/esda |
+| Pipeline | Python, PyTorch (SegFormer or DualHeadUNet + TwoHead Siamese ResNet-34), GeoPandas, PySAL/esda |
 | Database | PostgreSQL + PostGIS |
 | Frontend | Next.js 16, React 19, Tailwind CSS, Leaflet, Zustand |
 
@@ -65,7 +65,7 @@ Required `.env` values:
 | Variable | Description |
 |----------|-------------|
 | `DATABASE_URL` | PostGIS connection string |
-| `SEG_MODEL_PATH` | Path to segmentation model (directory for SegFormer) |
+| `SEG_MODEL_PATH` | Segmentation model: SegFormer directory or DualHeadUNet `best_model.pt` (type detected automatically) |
 | `DMG_MODEL_PATH` | Path to damage classifier `.pth` |
 | `PYTHON_BIN` | Python executable (default `python`) |
 | `PIPELINE_ENTRYPOINT` | Defaults to `../pipeline/main.py` |
@@ -85,6 +85,7 @@ standalone:
 
 ```powershell
 python main.py --pre pre.tif --post post.tif --seg-model models/segformer_best --dmg-model models/final.pt --output outputs/
+python main.py --pre pre.tif --post post.tif --seg-model models/dualhead_best_model.pt --dmg-model models/final.pt --output outputs/
 ```
 
 **Pipeline modes.** `--mode paper` (default) runs exactly the pipeline evaluated in the paper
@@ -92,7 +93,7 @@ python main.py --pre pre.tif --post post.tif --seg-model models/segformer_best -
 
 | Stage | Setting |
 |---|---|
-| Segmentation | SegFormer (MiT-B4) on the pre-disaster image, global 2–98 percentile stretch, 512 px window / 256 px stride, 4-flip TTA, threshold 0.5 |
+| Segmentation | SegFormer (MiT-B4, model directory) or DualHeadUNet + ConvNeXt-Tiny (`best_model.pt`, building head only; the type is detected from `--seg-model`) on the pre-disaster image, global 2–98 percentile stretch, 512 px window / 256 px stride, 4-flip TTA, threshold 0.5 |
 | Building instances | 4-connected components; components < 10 px are not classified (no-damage); bbox + 48 px, 224 × 224 crops from min-max stretched images |
 | Damage | TwoHead Siamese ResNet-34 with DiffAttention (`final.pt` state_dict), 6-view embedding-level TTA, binary head → 0.5·CE + 0.5·CORN severity |
 
@@ -107,8 +108,9 @@ npm install
 npm run dev              # http://localhost:3000
 ```
 
-Optional `.env.local`: `NEXT_PUBLIC_API_URL` (default `http://localhost:3001`) and
-`NEXT_PUBLIC_API_KEY` (sent as `x-api-key`).
+Optional `.env.local`: `NEXT_PUBLIC_API_URL` (default `http://localhost:3001`),
+`NEXT_PUBLIC_API_KEY` (sent as `x-api-key`) and `NEXT_PUBLIC_SEG_MODEL_LABEL` (segmentation model name shown in the UI
+and the PDF report, default `SegFormer`; e.g. `DualHeadUNet` when `SEG_MODEL_PATH` points to the DualHead `best_model.pt`).
 
 ### Default accounts
 
@@ -152,7 +154,7 @@ npm test                  # Jest + jsdom component/unit tests
 ```powershell
 # ML pipeline run time per scene and per km² (paper mode), on this machine
 cd pipeline
-python tools/benchmark_pipeline.py --scenes-dir <xBD images dir> --seg-model <segformer_best> --dmg-model <final.pt> --n 10 --device cpu
+python tools/benchmark_pipeline.py --scenes-dir <xBD images dir> --seg-model <segformer_best or dualhead best_model.pt> --dmg-model <final.pt> --n 10 --device cpu
 
 # PostGIS ingest, map queries, region grid + DBSCAN, Getis-Ord Gi* on 1k / 5k / 10k buildings
 cd backend

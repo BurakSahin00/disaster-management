@@ -4,10 +4,14 @@ Paper (SAUCIS revision) inference path.
 Reproduces exactly the end-to-end pipeline evaluated in the paper
 (`02_end_to_end_eval` notebook / `e2e_lib.py` in the revision workspace):
 
-  Stage 1  SegFormer (MiT-B4) on the pre-disaster image
+  Stage 1  Building segmentation on the pre-disaster image, one of
+             - SegFormer (MiT-B4): Hugging Face model directory; softmax(channel 1)
+             - DualHeadUNet + ConvNeXt-Tiny: `best_model.pt` state_dict of the revision runs
+               (07_seg_sfrecipe); sigmoid of the building head (the boundary head is used only in training)
+           The model type is detected from --seg-model (directory -> SegFormer, DualHead state_dict -> DualHead).
            - global percentile (2-98) contrast stretch -> uint8
            - sliding window 512 px, stride 256 px, 4-flip TTA (id, h, v, hv)
-           - softmax(channel 1) averaged over flips and overlapping windows
+           - building probability averaged over flips and overlapping windows
            - building mask = probability >= 0.5
   Stage 2  building instances
            - scipy.ndimage.label with 4-connectivity
@@ -104,6 +108,115 @@ def segformer_probability(processor, model, img_u8: np.ndarray, device: str, cfg
             if dims:
                 lg = torch.flip(lg, dims=dims)
             acc += torch.softmax(lg.float(), dim=1)[:, 1]
+        acc = (acc / len(flips)).cpu().numpy()
+        for k, (y, x) in enumerate(chunk):
+            p_sum[y:y + th, x:x + tw] += acc[k]
+            wsum[y:y + th, x:x + tw] += 1.0
+    return p_sum / np.maximum(wsum, 1e-6)
+
+
+# --------------------------------------------------------------------------- stage 1, DualHeadUNet
+SEG_ARCH_NAMES = {"segformer": "SegFormer (MiT-B4)", "dualhead": "DualHeadUNet + ConvNeXt-Tiny"}
+
+
+class DualHeadUNet(nn.Module):
+    """Same layout as `DualHeadUNet` in the segmentation training code (07_seg_sfrecipe):
+    an smp U-Net whose segmentation head is the building head, plus a boundary head on the decoder output.
+    encoder_weights=None: all weights come from the checkpoint (strict loading), nothing is downloaded."""
+
+    def __init__(self, encoder_name: str = "tu-convnext_tiny"):
+        super().__init__()
+        import segmentation_models_pytorch as smp
+        self.base = smp.Unet(encoder_name=encoder_name, encoder_weights=None, in_channels=3, classes=1)
+        dec_ch = self.base.segmentation_head[0].in_channels
+        self.building_head = self.base.segmentation_head
+        self.boundary_head = nn.Sequential(
+            nn.Conv2d(dec_ch, dec_ch, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(dec_ch, 1, kernel_size=1),
+        )
+
+    def forward(self, x):
+        feats = self.base.encoder(x)
+        try:
+            dec = self.base.decoder(feats)          # segmentation-models-pytorch >= 0.5 (as in training)
+        except TypeError:
+            dec = self.base.decoder(*feats)         # older segmentation-models-pytorch
+        return self.building_head(dec), self.boundary_head(dec)
+
+
+def _unwrap_state_dict(obj):
+    if isinstance(obj, nn.Module):
+        return obj.state_dict()
+    if isinstance(obj, dict):
+        for k in ("model_state_dict", "state_dict"):
+            if isinstance(obj.get(k), dict):
+                return obj[k]
+    return obj
+
+
+def is_dualhead_state_dict(state_dict) -> bool:
+    if not isinstance(state_dict, dict):
+        return False
+    keys = [k for k in state_dict if isinstance(k, str)]
+    return any(k.startswith("boundary_head.") for k in keys) and any(k.startswith("base.encoder.") for k in keys)
+
+
+def detect_seg_arch(model_path: str) -> str:
+    """'segformer' for a Hugging Face model directory, 'dualhead' for a DualHeadUNet state_dict."""
+    import os
+    if os.path.isdir(model_path):
+        return "segformer"
+    sd = _unwrap_state_dict(torch.load(model_path, map_location="cpu", weights_only=False))
+    if is_dualhead_state_dict(sd):
+        return "dualhead"
+    raise ValueError(f"{model_path}: unknown segmentation model. Expected a SegFormer directory "
+                     "or a DualHeadUNet + ConvNeXt-Tiny state_dict (best_model.pt).")
+
+
+class DualHeadSegmenter:
+    """Loads a DualHeadUNet + ConvNeXt-Tiny checkpoint (strict) for paper-mode inference."""
+
+    arch = "dualhead"
+    name = SEG_ARCH_NAMES["dualhead"]
+
+    def __init__(self, model_path: str, device: Optional[str] = None, encoder_name: str = "tu-convnext_tiny"):
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        sd = _unwrap_state_dict(torch.load(model_path, map_location="cpu", weights_only=False))
+        if not is_dualhead_state_dict(sd):
+            raise ValueError(f"{model_path}: not a DualHeadUNet state_dict (expected base.encoder.* and boundary_head.* keys).")
+        m = DualHeadUNet(encoder_name)
+        m.load_state_dict(sd, strict=True)          # fails if a single layer differs from the training model
+        self.model = m.to(self.device).eval()
+
+
+@torch.no_grad()
+def dualhead_probability(model: nn.Module, img_u8: np.ndarray, device: str, cfg: dict) -> np.ndarray:
+    """Building probability map (H, W) with sliding window + 4-flip TTA; same windows, normalisation
+    (ImageNet, x/255) and averaging as the evaluation code (`seg_alt_lib.scene_prob`)."""
+    T, S = cfg["tile"], cfg["stride"]
+    H, W = img_u8.shape[:2]
+    th, tw = min(T, H), min(T, W)
+    ys = sorted(set(list(range(0, max(H - T, 0) + 1, S)) + [max(H - T, 0)]))
+    xs = sorted(set(list(range(0, max(W - T, 0) + 1, S)) + [max(W - T, 0)]))
+    coords = [(y, x) for y in ys for x in xs]
+    flips = [None, [3], [2], [2, 3]] if cfg["seg_tta"] else [None]
+    p_sum = np.zeros((H, W), np.float32)
+    wsum = np.zeros((H, W), np.float32)
+    B = max(1, int(cfg["seg_batch"]))
+    for i in range(0, len(coords), B):
+        chunk = coords[i:i + B]
+        tiles = np.stack([img_u8[y:y + th, x:x + tw] for y, x in chunk]).astype(np.float32)
+        tiles = (tiles / 255.0 - IMAGENET_MEAN) / IMAGENET_STD
+        imgs = torch.from_numpy(np.ascontiguousarray(tiles.transpose(0, 3, 1, 2))).to(device)
+        acc = torch.zeros(len(chunk), th, tw, device=device)
+        for dims in flips:
+            x_in = torch.flip(imgs, dims=dims) if dims else imgs
+            lg = model(x_in)[0]                                         # building head
+            lg = F.interpolate(lg, size=(th, tw), mode="bilinear", align_corners=False)
+            if dims:
+                lg = torch.flip(lg, dims=dims)
+            acc += torch.sigmoid(lg.float())[:, 0]
         acc = (acc / len(flips)).cpu().numpy()
         for k, (y, x) in enumerate(chunk):
             p_sum[y:y + th, x:x + tw] += acc[k]

@@ -1,5 +1,6 @@
-"""Paper-mode pipeline: loads a TwoHead (DiffAttention) checkpoint, runs SegFormer TTA + 4-connected components,
-and writes consistent outputs. Uses a tiny random SegFormer and an injected probability map, CPU only."""
+"""Paper-mode pipeline: loads a TwoHead (DiffAttention) checkpoint, runs SegFormer or DualHeadUNet TTA +
+4-connected components, and writes consistent outputs. Uses a tiny random SegFormer, a random DualHeadUNet
+(ConvNeXt-Tiny, no download) and an injected probability map, CPU only."""
 import json
 import sys
 import tempfile
@@ -85,6 +86,54 @@ class PaperModeTests(unittest.TestCase):
         out = self.tmp / "a" / "b" / "out"
         pl.run(str(self.tmp / "pre.tif"), str(self.tmp / "post.tif"), str(out))
         self.assertTrue((out / "report.json").exists())
+
+    # ------------------------------------------------------------------ DualHeadUNet + ConvNeXt-Tiny
+    def _dualhead_ckpt(self):
+        torch.manual_seed(0)
+        path = self.tmp / "dualhead_best_model.pt"
+        torch.save(paper.DualHeadUNet().state_dict(), path)      # same format as best_model.pt (plain state_dict)
+        return path
+
+    def test_detects_segmentation_model_type(self):
+        self.assertEqual(paper.detect_seg_arch(str(self.tmp / "seg")), "segformer")
+        self.assertEqual(paper.detect_seg_arch(str(self._dualhead_ckpt())), "dualhead")
+        torch.save({"foo.weight": torch.zeros(1)}, self.tmp / "other.pt")
+        with self.assertRaises(ValueError):
+            paper.detect_seg_arch(str(self.tmp / "other.pt"))
+
+    def test_dualhead_probability_shape_range_and_flip_equivariance(self):
+        seg = paper.DualHeadSegmenter(str(self._dualhead_ckpt()), device="cpu")
+        cfg = dict(paper.PAPER_DEFAULTS)
+        img = np.random.default_rng(1).integers(0, 256, (640, 640, 3)).astype(np.uint8)
+        prob = paper.dualhead_probability(seg.model, img, "cpu", cfg)
+        self.assertEqual(prob.shape, (640, 640))
+        self.assertTrue(0.0 <= prob.min() and prob.max() <= 1.0)
+        # 4-flip TTA + symmetric windows: flipping the input flips the probability map
+        prob_h = paper.dualhead_probability(seg.model, img[:, ::-1].copy(), "cpu", cfg)
+        np.testing.assert_allclose(prob_h, prob[:, ::-1], atol=1e-5)
+
+    def test_dualhead_end_to_end_outputs(self):
+        pl = DamageAnalysisPipeline(str(self._dualhead_ckpt()), str(self.tmp / "final.pt"), device="cpu", mode="paper")
+        self.assertEqual(pl.seg_arch, "dualhead")
+        self.assertEqual((pl.cfg["seg_batch"], pl.cfg["cls_batch"]), (1, 16))   # CPU batches apply to DualHead too
+        original = paper.dualhead_probability
+        prob = np.zeros((1024, 1024), np.float32)
+        prob[100:140, 100:150] = prob[300:330, 400:430] = prob[600:602, 600:603] = 0.9
+        paper.dualhead_probability = lambda model, img, dev, cfg: prob
+        try:
+            pl.run(str(self.tmp / "pre.tif"), str(self.tmp / "post.tif"), str(self.tmp / "out_dh"))
+        finally:
+            paper.dualhead_probability = original
+        rep = json.loads((self.tmp / "out_dh" / "report.json").read_text())
+        self.assertEqual(rep["models"]["segmentation_arch"], "dualhead")
+        self.assertEqual(rep["timing"]["seg_model"], "DualHeadUNet + ConvNeXt-Tiny")
+        self.assertEqual(rep["timing"]["n_components"], 3)
+        self.assertEqual(rep["timing"]["n_classified"], 2)
+
+    def test_segformer_still_selected_for_directory(self):
+        pl = DamageAnalysisPipeline(str(self.tmp / "seg"), str(self.tmp / "final.pt"), device="cpu", mode="paper")
+        self.assertEqual(pl.seg_arch, "segformer")
+        self.assertTrue(pl.seg_model._is_segformer)
 
     def test_loads_checkpoint_without_diff_attn(self):
         torch.save(paper.TwoHeadSiamese("resnet34", use_diff_attn=False).state_dict(), self.tmp / "old.pt")

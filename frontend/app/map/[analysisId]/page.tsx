@@ -16,6 +16,7 @@ import { useAnalysisStore } from '@/store/useAnalysisStore'
 import { apiGet, apiPost } from '@/lib/api'
 import { generateDamageReport } from '@/lib/generateReport'
 import { buildingCentroid } from '@/components/map/geojsonToLeaflet'
+import { SEG_MODEL_LABEL } from '@/lib/constants'
 import type { BuildingsGeoJson, GeoJsonBuilding, RegionsGeoJson, ClustersGeoJson, HotspotGeoJson } from '@/types'
 
 const LeafletMap = dynamic(() => import('@/components/map/LeafletMap'), { ssr: false })
@@ -317,7 +318,7 @@ export default function MapPage() {
                   {[
                     ['Analysis ID', params.analysisId.slice(0, 8) + '…'],
                     ['Coordinate', 'EPSG:4326'],
-                    ['Model', 'SegFormer + 4-class'],
+                    ['Model', `${SEG_MODEL_LABEL} + 4-class`],
                     ['Regions', regionCount > 0 ? String(regionCount) : '—'],
                     ['Clusters', clusterCount > 0 ? String(clusterCount) : '—'],
                   ].map(([k, v]) => (

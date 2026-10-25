@@ -8,6 +8,7 @@ import { useAnalysisStore } from '@/store/useAnalysisStore'
 import { apiGet, apiPost } from '@/lib/api'
 import { useAuthStore } from '@/store/useAuthStore'
 import type { JobResponse, ProjectRow } from '@/types'
+import { SEG_MODEL_LABEL } from '@/lib/constants'
 
 export default function UploadPage() {
   const router = useRouter()
@@ -98,7 +99,7 @@ export default function UploadPage() {
               presetProjectName={presetProjectName}
             />
             <div className="flex gap-3 mt-4 flex-wrap">
-              {['SegFormer segmentation', '4-class damage model', 'GeoJSON output', 'PostGIS'].map((t) => (
+              {[`${SEG_MODEL_LABEL} segmentation`, '4-class damage model', 'GeoJSON output', 'PostGIS'].map((t) => (
                 <span key={t} className="text-[11px] text-text-faint flex items-center gap-1.5">
                   <svg width="6" height="6" viewBox="0 0 6 6">
                     <circle cx="3" cy="3" r="3" fill="#d1cfc8" />

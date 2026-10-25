@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { RegionsGeoJson, ClustersGeoJson } from '@/types'
+import { SEG_MODEL_LABEL } from '@/lib/constants'
 
 // Identity function — kept for call-site compatibility; no longer needed since all text is ASCII
 function tr(s: string): string {
@@ -176,7 +177,7 @@ export function generateDamageReport(input: ReportInput): void {
   ]
   const metaRight = [
     ['Report Date', new Date().toLocaleDateString('en-US', { dateStyle: 'long' })],
-    ['Model',       'SegFormer + 4-class damage classifier'],
+    ['Model',       `${SEG_MODEL_LABEL} + 4-class damage classifier`],
   ]
   const colW = (W - 28 - 6) / 2
 

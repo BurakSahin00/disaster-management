@@ -7,11 +7,12 @@ import { ProgressCard } from '@/components/progress/ProgressCard'
 import { LogTerminal } from '@/components/progress/LogTerminal'
 import { useJobSocket } from '@/lib/useJobSocket'
 import { useAnalysisStore } from '@/store/useAnalysisStore'
+import { SEG_MODEL_LABEL } from '@/lib/constants'
 
 const STEPS = [
   { label: 'Loading TIFF Files',       sub: 'Reading pre/post images into memory'              },
   { label: 'Projection Matching',      sub: 'CRS reprojection, pixel alignment'                },
-  { label: 'Building Segmentation',    sub: 'Detecting building footprints with SegFormer'     },
+  { label: 'Building Segmentation',    sub: `Detecting building footprints with ${SEG_MODEL_LABEL}` },
   { label: 'Change Analysis',          sub: 'Computing polygon extraction'                     },
   { label: 'Damage Classification',    sub: 'Running 4-class damage model'                     },
   { label: 'GeoJSON Export',           sub: 'Polygon database and statistics report'           },

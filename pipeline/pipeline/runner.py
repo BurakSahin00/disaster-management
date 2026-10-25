@@ -36,26 +36,38 @@ class DamageAnalysisPipeline:
         # mode="legacy": the earlier platform pipeline (contours, single-pass models).
         self.mode = mode
         self.loader = TiffLoader(tile_size=tile_size, overlap=overlap)
-        self.seg_model = SegmentationModel(seg_model_path, device=device)
         self.min_building_area = min_building_area
         self.crop_size = crop_size
         self.cfg = dict(paper.PAPER_DEFAULTS)
         if paper_cfg:
             self.cfg.update({k: v for k, v in paper_cfg.items() if v is not None})
+        if mode == "paper":
+            # Segmentation model type from --seg-model: SegFormer directory or DualHeadUNet best_model.pt
+            self.seg_arch = paper.detect_seg_arch(seg_model_path)
+            if self.seg_arch == "dualhead":
+                self.seg_model = paper.DualHeadSegmenter(seg_model_path, device=device)
+            else:
+                self.seg_model = SegmentationModel(seg_model_path, device=device)
+            self.seg_name = paper.SEG_ARCH_NAMES[self.seg_arch]
+            self._apply_cpu_batch(paper_cfg)
+            self.dmg_model = paper.TwoHeadDamageClassifier(dmg_model_path, device=device)
+            print(f"[paper] segmentation: {self.seg_name}; TwoHead classifier: {self.dmg_model.backbone}, "
+                  f"DiffAttention={self.dmg_model.has_diff_attn}, device={self.dmg_model.device}; settings={self.cfg}")
+        elif mode == "legacy":
+            self.seg_model = SegmentationModel(seg_model_path, device=device)
+            self.seg_arch = "segformer" if self.seg_model._is_segformer else "pth"
+            self.seg_name = paper.SEG_ARCH_NAMES.get(self.seg_arch, "SMP U-Net")
+            self._apply_cpu_batch(paper_cfg)
+            self.dmg_model = DamageClassifier(dmg_model_path, device=device)
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
+
+    def _apply_cpu_batch(self, paper_cfg: Optional[dict]) -> None:
+        # Smaller default batches on CPU (outputs do not depend on the batch size); explicit values win.
         if not str(self.seg_model.device).startswith("cuda"):
             for k, v in paper.CPU_BATCH.items():
                 if not (paper_cfg and paper_cfg.get(k) is not None):
                     self.cfg[k] = v
-        if mode == "paper":
-            if not self.seg_model._is_segformer:
-                raise ValueError("mode='paper' requires the SegFormer model directory as --seg-model.")
-            self.dmg_model = paper.TwoHeadDamageClassifier(dmg_model_path, device=device)
-            print(f"[paper] TwoHead classifier: {self.dmg_model.backbone}, DiffAttention={self.dmg_model.has_diff_attn}, "
-                  f"device={self.dmg_model.device}; settings={self.cfg}")
-        elif mode == "legacy":
-            self.dmg_model = DamageClassifier(dmg_model_path, device=device)
-        else:
-            raise ValueError(f"Unknown mode: {mode}")
 
     def run(self, pre_path: str, post_path: str, output_dir: str = "outputs") -> dict:
         if self.mode == "paper":
@@ -141,10 +153,13 @@ class DamageAnalysisPipeline:
         pre_pct, pre_mm, post_mm = paper.percentile_uint8(pre), paper.minmax_uint8(pre), paper.minmax_uint8(post)
         timing["read_s"] = time.perf_counter() - t
 
-        print(f"[1/3] Segmentasyon (SegFormer, pencere {cfg['tile']}/{cfg['stride']}, TTA={cfg['seg_tta']}) ... ({h}x{w} px)")
+        print(f"[1/3] Segmentasyon ({self.seg_name}, pencere {cfg['tile']}/{cfg['stride']}, TTA={cfg['seg_tta']}) ... ({h}x{w} px)")
         self._sync(); t = time.perf_counter()
-        prob = paper.segformer_probability(self.seg_model._processor, self.seg_model._hf_model, pre_pct,
-                                           self.seg_model.device, cfg)
+        if self.seg_arch == "dualhead":
+            prob = paper.dualhead_probability(self.seg_model.model, pre_pct, self.seg_model.device, cfg)
+        else:
+            prob = paper.segformer_probability(self.seg_model._processor, self.seg_model._hf_model, pre_pct,
+                                               self.seg_model.device, cfg)
         self._sync(); timing["seg_s"] = time.perf_counter() - t
         binary_mask = (prob >= cfg["seg_threshold"]).astype(np.uint8)
 
@@ -180,12 +195,15 @@ class DamageAnalysisPipeline:
         timing["outputs_s"] = time.perf_counter() - t
         timing["total_s"] = time.perf_counter() - t_all
         timing.update({"n_components": int(n_comp), "n_classified": int(len(ids)), "n_small": int(len(small)),
-                       "height": int(h), "width": int(w), "device": str(self.seg_model.device), "settings": cfg})
+                       "height": int(h), "width": int(w), "device": str(self.seg_model.device),
+                       "seg_model": self.seg_name, "settings": cfg})
         import json
         rp = output_dir / "report.json"
         report = json.loads(rp.read_text())
         report["timing"] = timing
         report["mode"] = "paper"
+        report["models"] = {"segmentation": self.seg_name, "segmentation_arch": self.seg_arch,
+                            "damage": f"TwoHead Siamese {self.dmg_model.backbone}"}
         rp.write_text(json.dumps(report, indent=2))
         (output_dir / "timing.json").write_text(json.dumps(timing, indent=2))
         summary = self._summarize(damage_labels)
